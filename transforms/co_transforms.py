@@ -23,10 +23,10 @@ class Compose:
     def __init__(self, co_transforms):
         self.co_transforms = co_transforms
 
-    def __call__(self, imgs, full_segs, key_objs, target):
+    def __call__(self, imgs, target):
         for t in self.co_transforms:
-            imgs, full_segs, key_objs, target = t(imgs, full_segs, key_objs, target)
-        return imgs, full_segs, key_objs, target
+            imgs, target = t(imgs, target)
+        return imgs, target
 
 
 class RandomCrop:
@@ -41,7 +41,7 @@ class RandomCrop:
         else:
             self.size = size
 
-    def __call__(self, imgs, full_segs, key_objs, target):
+    def __call__(self, imgs, target):
         h, w, _ = imgs[0].shape
         th, tw = self.size
         if w == tw and h == th:
@@ -50,46 +50,42 @@ class RandomCrop:
         x1 = random.randint(0, w - tw)
         y1 = random.randint(0, h - th)
         imgs = [img[y1 : y1 + th, x1 : x1 + tw] for img in imgs]
-        full_segs = [full_seg[y1 : y1 + th, x1 : x1 + tw] for full_seg in full_segs]
-        key_objs = [key_obj[y1 : y1 + th, x1 : x1 + tw] for key_obj in key_objs]
+        
 
         if target != {}:
             raise NotImplementedError(
                 "RandomCrop currently does not take ground-truth labels"
             )
 
-        return imgs, full_segs, key_objs, target
+        return imgs, target
 
 
 class RandomTemporalSwap:
     """Randomly swap first and second frames"""
 
-    def __call__(self, imgs, full_segs, key_objs, target):
+    def __call__(self, imgs,  target):
 
         if random.random() < 0.5:
             imgs = imgs[::-1]
-            full_segs = full_segs[::-1]
-            key_objs = key_objs[::-1]
 
             if target != {}:
                 raise NotImplementedError(
                     "RandomTemporalSwap currently does not take ground-truth labels"
                 )
 
-        return imgs, full_segs, key_objs, target
+        return imgs, target
 
 
 class RandomHorizontalFlip:
     """Randomly horizontally flips the given PIL.Image with a probability of 0.5"""
 
-    def __call__(self, imgs, full_segs, key_objs, target):
+    def __call__(self, imgs, target):
         if random.random() < 0.5:
             imgs = [np.copy(np.fliplr(im)) for im in imgs]
-            full_segs = [np.copy(np.fliplr(full_seg)) for full_seg in full_segs]
-            key_objs = [np.copy(np.fliplr(key_obj)) for key_obj in key_objs]
+
 
             if target != {}:
                 raise NotImplementedError(
                     "RandomHorizontalFlip currently does not take ground-truth labels"
                 )
-        return imgs, full_segs, key_objs, target
+        return imgs,target

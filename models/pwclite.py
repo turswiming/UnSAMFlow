@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.correlation_internal import Correlation_ours
+# from models.correlation_internal import Correlation_ours
 
-# from .correlation_package.correlation import Correlation
+from .correlation_package.correlation import Correlation
 # from .correlation_native import Correlation
 
 from transforms.input_transforms import full_segs_to_adj_maps
@@ -195,24 +195,24 @@ class PWCLite(nn.Module):
 
         # decoder
         ## Our correlation implementation
-        self.corr = Correlation_ours(
-            kernel_size=1,
-            patch_size=(2 * self.search_range + 1),
-            stride=1,
-            padding=0,
-            dilation_patch=1,
-            normalize=True,
-        )
-
-        ## Correlation modeuld in the original code
-        # self.corr = Correlation(
-        #     pad_size=self.search_range,
+        # self.corr = Correlation_ours(
         #     kernel_size=1,
-        #     max_displacement=self.search_range,
-        #     stride1=1,
-        #     stride2=1,
-        #     corr_multiply=1,
+        #     patch_size=(2 * self.search_range + 1),
+        #     stride=1,
+        #     padding=0,
+        #     dilation_patch=1,
+        #     normalize=True,
         # )
+
+        # Correlation modeuld in the original code
+        self.corr = Correlation(
+            pad_size=self.search_range,
+            kernel_size=1,
+            max_displacement=self.search_range,
+            stride1=1,
+            stride2=1,
+            corr_multiply=1,
+        )
 
         self.dim_corr = (self.search_range * 2 + 1) ** 2
 

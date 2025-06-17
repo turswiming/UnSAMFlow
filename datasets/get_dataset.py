@@ -33,8 +33,8 @@ def get_dataset(cfg):
 
         train_set_1 = KITTIRawFile(
             cfg.root_raw,
-            cfg.full_seg_root_raw,
-            cfg.key_obj_root_raw,
+            None,  # Removed full_seg_root
+            None,  # Removed key_obj_root
             name="kitti-raw",
             input_transform=train_input_transform,
             ap_transform=ap_transform,
@@ -42,8 +42,8 @@ def get_dataset(cfg):
         )
         train_set_2_1 = KITTIFlowMV(
             cfg.root_kitti15,
-            cfg.full_seg_root_kitti15,
-            cfg.key_obj_root_kitti15,
+            None,  # Removed full_seg_root
+            None,  # Removed key_obj_root
             name="kitti2015-mv",
             input_transform=train_input_transform,
             ap_transform=ap_transform,
@@ -51,8 +51,8 @@ def get_dataset(cfg):
         )
         train_set_2_2 = KITTIFlowMV(
             cfg.root_kitti12,
-            cfg.full_seg_root_kitti12,
-            cfg.key_obj_root_kitti12,
+            None,  # Removed full_seg_root
+            None,  # Removed key_obj_root
             name="kitti2012-mv",
             input_transform=train_input_transform,
             ap_transform=ap_transform,
@@ -63,15 +63,15 @@ def get_dataset(cfg):
 
         valid_set_1 = KITTIFlowEval(
             cfg.root_kitti15,
-            cfg.full_seg_root_kitti15,
-            None,
+            None,  # Removed full_seg_root
+            None,  # Removed key_obj_root
             name="kitti2015",
             input_transform=valid_input_transform,
         )
         valid_set_2 = KITTIFlowEval(
             cfg.root_kitti12,
-            cfg.full_seg_root_kitti12,
-            None,
+            None,  # Removed full_seg_root
+            None,  # Removed key_obj_root
             name="kitti2012",
             input_transform=valid_input_transform,
         )
@@ -89,8 +89,8 @@ def get_dataset(cfg):
 
         train_set_1 = SintelRaw(
             cfg.root_sintel_raw,
-            cfg.full_seg_root_sintel_raw,
-            cfg.key_obj_root_sintel_raw,
+            None,  # Removed full_seg_root
+            None,  # Removed key_obj_root
             name="sintel-raw",
             input_transform=train_input_transform,
             ap_transform=ap_transform,
@@ -98,8 +98,8 @@ def get_dataset(cfg):
         )
         train_set_2_1 = Sintel(
             cfg.root_sintel,
-            cfg.full_seg_root_sintel,
-            cfg.key_obj_root_sintel,
+            None,  # Removed full_seg_root
+            None,  # Removed key_obj_root
             name="sintel-clean_" + cfg.train_subsplit,
             dataset_type="clean",
             split="train",
@@ -110,8 +110,8 @@ def get_dataset(cfg):
         )
         train_set_2_2 = Sintel(
             cfg.root_sintel,
-            cfg.full_seg_root_sintel,
-            cfg.key_obj_root_sintel,
+            None,  # Removed full_seg_root
+            None,  # Removed key_obj_root
             name="sintel-final_" + cfg.train_subsplit,
             dataset_type="final",
             split="train",
@@ -125,8 +125,8 @@ def get_dataset(cfg):
 
         valid_set_1 = Sintel(
             cfg.root_sintel,
-            cfg.full_seg_root_sintel,
-            None,
+            None,  # Removed full_seg_root
+            None,  # Removed key_obj_root
             name="sintel-clean_" + cfg.val_subsplit,
             dataset_type="clean",
             split="train",
@@ -136,8 +136,8 @@ def get_dataset(cfg):
         )
         valid_set_2 = Sintel(
             cfg.root_sintel,
-            cfg.full_seg_root_sintel,
-            None,
+            None,  # Removed full_seg_root
+            None,  # Removed key_obj_root
             name="sintel-final_" + cfg.val_subsplit,
             dataset_type="final",
             split="train",

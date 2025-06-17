@@ -15,21 +15,18 @@ import torch
 # from transforms.input_transforms import full_segs_to_adj_maps
 from utils.flow_utils import load_flow
 
-from utils.manifold_utils import pathmgr
+# from utils.manifold_utils import pathmgr
 
 
 def local_path(path):
-    if "manifold" in path:
-        return pathmgr.get_local_path(path)
-    else:
-        return path
+    return path
 
 
 class ImgSeqDataset(torch.utils.data.Dataset, metaclass=ABCMeta):
     def __init__(
         self,
         root,
-        full_seg_root,
+        full_seg_root=None,  # Make segmentation roots optional
         key_obj_root=None,
         name="",
         input_transform=None,
@@ -50,12 +47,11 @@ class ImgSeqDataset(torch.utils.data.Dataset, metaclass=ABCMeta):
         pass
 
     def _load_sample(self, s):
-
         imgs = []
         full_segs = []
         key_objs = []
         for p in s["imgs"]:
-
+            # Load images
             image = (
                 imageio.imread(local_path(os.path.join(self.root, p))).astype(
                     np.float32
@@ -64,10 +60,14 @@ class ImgSeqDataset(torch.utils.data.Dataset, metaclass=ABCMeta):
             )
             imgs.append(image)
 
-            full_seg = imageio.imread(local_path(os.path.join(self.full_seg_root, p)))[
-                :, :, None
-            ]
-            full_segs.append(full_seg)
+            # Initialize empty arrays for segmentation data
+            full_segs.append(None)
+            key_objs.append(None)
+
+            # Only load segmentation data if path is provided and needed
+            if self.full_seg_root is not None:
+                full_seg = imageio.imread(local_path(os.path.join(self.full_seg_root, p)))[:, :, None]
+                full_segs[-1] = full_seg
 
             if self.key_obj_root is not None:
                 key_obj = (
@@ -76,7 +76,7 @@ class ImgSeqDataset(torch.utils.data.Dataset, metaclass=ABCMeta):
                     )
                     / 255.0
                 )
-                key_objs.append(key_obj)
+                key_objs[-1] = key_obj
 
         return imgs, full_segs, key_objs
 
@@ -93,28 +93,32 @@ class ImgSeqDataset(torch.utils.data.Dataset, metaclass=ABCMeta):
 
         if self.co_transform is not None:
             # In unsupervised learning, there is no need to change target with image
-            imgs, full_segs, key_objs, _ = self.co_transform(
-                imgs, full_segs, key_objs, {}
+            imgs, _ = self.co_transform(
+                imgs,{}
             )
 
         if self.input_transform is not None:
-            imgs, full_segs, key_objs = self.input_transform(
-                (imgs, full_segs, key_objs)
+            imgs = self.input_transform(
+                imgs
             )
 
-        # adj_maps = full_segs_to_adj_maps(torch.stack(full_segs), win_size=9)
-
+        # Add only image data to the output
         data.update(
             {
                 "img1": imgs[0],
                 "img2": imgs[1],
-                "full_seg1": full_segs[0],
-                "full_seg2": full_segs[1],
             }
         )
 
-        # process key_objs to keep exactly three objects (to make sure the number of objects is fixed so that we can form batches)
-        if self.key_obj_root is not None:
+        # Only add segmentation data if it's available
+        if self.full_seg_root is not None and full_segs[0] is not None:
+            data.update({
+                "full_seg1": full_segs[0],
+                "full_seg2": full_segs[1],
+            })
+
+        # process key_objs only if they're available
+        if self.key_obj_root is not None and key_objs[0] is not None:
             place_holder = torch.full(
                 (1, *key_objs[0].shape[1:]), np.nan, dtype=torch.float32
             )
@@ -351,11 +355,11 @@ class Sintel(ImgSeqDataset):
         data = super(Sintel, self).__getitem__(idx)
         if self.with_flow:
             data["flow_gt"] = load_flow(
-                pathmgr.get_local_path(self.samples[idx]["flow"])
+                self.samples[idx]["flow"]
             ).astype(np.float32)
             data["occ_mask"] = (
                 imageio.imread(
-                    pathmgr.get_local_path(self.samples[idx]["occ_mask"])
+                    self.samples[idx]["occ_mask"]
                 ).astype(np.float32)[:, :, None]
                 / 255.0
             )

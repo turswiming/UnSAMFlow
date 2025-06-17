@@ -9,7 +9,7 @@ from abc import abstractmethod
 import numpy as np
 import torch
 
-from utils.manifold_utils import pathmgr
+# from utils.manifold_utils import pathmgr
 from utils.torch_utils import (
     AdamW,
     bias_parameters,

@@ -16,6 +16,7 @@ import numpy as np
 
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
 from tqdm import tqdm
+YOUR_DIR = "/home/lzq/workspace/UnSAMFlow_data/"
 
 parser = argparse.ArgumentParser(
     description=(
@@ -405,10 +406,7 @@ def main_mask_to_key_objects():
                 continue
 
             num_unique_masks = ((masks_map * mask[:, :, None]).sum((0, 1)) > 0).sum()
-            if num_unique_masks >= 6:
-                obj_masks = np.concatenate(
-                    (obj_masks, (mask[:, :, None] * 255).astype(np.uint8)), axis=-1
-                )
+            if num_unique_masks >= 6:data_stereo_flow_multiview
 
         save_path = "{}/results/sam_results/key_objects/{}/{}.npy".format(
             home_dir, ds, img_name[:-4]

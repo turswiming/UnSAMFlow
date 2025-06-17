@@ -11,7 +11,6 @@ import torch
 from transforms.ar_transforms.oc_transforms import add_fake_object, random_crop
 from transforms.ar_transforms.sp_transforms import RandomAffineFlow
 
-# from transforms.input_transforms import full_segs_to_adj_maps
 from utils.flow_utils import evaluate_flow
 from utils.misc_utils import AverageMeter
 
@@ -94,20 +93,13 @@ class TrainFramework(BaseTrainer):
 
                 # read data to device
                 img1, img2 = data["img1"].to(self.device), data["img2"].to(self.device)
-                full_seg1, full_seg2 = data["full_seg1"].to(self.device), data[
-                    "full_seg2"
-                ].to(self.device)
-
-                # adj_map1, adj_map2 = data["adj_map1"].to(self.device), data[
-                #     "adj_map2"
-                # ].to(self.device)
 
                 # timing: 1_data_loading
                 batch_timing.append(time.time() - last_time)
                 last_time = time.time()
 
                 # run 1st pass
-                res_dict = self.model(img1, img2, full_seg1, full_seg2, with_bk=True)
+                res_dict = self.model(img1, img2, with_bk=True)
 
                 # timing: 2_main_forward
                 batch_timing.append(time.time() - last_time)
@@ -126,9 +118,7 @@ class TrainFramework(BaseTrainer):
                     flow_mean,
                     flow_vis_mask12,
                     flow_vis_mask21,
-                ) = self.loss_func(
-                    flows, img1, img2, full_seg1=full_seg1, full_seg2=full_seg2
-                )
+                ) = self.loss_func(flows, img1, img2)
                 loss = loss.mean()
                 l_ph = l_ph.mean()
                 l_sm = l_sm.mean()
@@ -148,7 +138,7 @@ class TrainFramework(BaseTrainer):
                     )
                     s = {
                         "imgs": [img1, img2],
-                        "full_segs": [full_seg1, full_seg2],
+                        # Remove segmentation data
                         "flows_f": [flow_ori],
                         "masks_f": [noc_ori],
                     }
@@ -160,14 +150,10 @@ class TrainFramework(BaseTrainer):
                     )
                     flow_t, noc_t = st_res["flows_f"][0], st_res["masks_f"][0]
 
-                    # run another pass
+                    # run another pass - remove segmentation params
                     img1_st, img2_st = st_res["imgs"]
-                    full_seg1_st, full_seg2_st = st_res["full_segs"]
-                    # adj_map1_st, adj_map2_st = full_segs_to_adj_maps(
-                    #     full_seg1_st
-                    # ), full_segs_to_adj_maps(full_seg2_st)
                     flow_t_pred = self.model(
-                        img1_st, img2_st, full_seg1_st, full_seg2_st, with_bk=False
+                        img1_st, img2_st, with_bk=False
                     )["flows_12"][0]
 
                     if not self.cfg.mask_st:
@@ -191,9 +177,8 @@ class TrainFramework(BaseTrainer):
                     img1_ot, img2_ot = data["img1_ph"].to(self.device), data[
                         "img2_ph"
                     ].to(self.device)
-                    full_seg1_ot, full_seg2_ot = data["full_seg1"].to(
-                        self.device
-                    ), data["full_seg2"].to(self.device)
+                    # Remove segmentation data loading
+                    # full_seg1_ot, full_seg2_ot = data["full_seg1"].to(self.device), data["full_seg2"].to(self.device)
 
                     flow_ot = flow_ori.clone()
                     noc_ot = noc_ori.clone()
@@ -218,8 +203,7 @@ class TrainFramework(BaseTrainer):
                             input_dict = {
                                 "img1_tgt": img1_ot,
                                 "img2_tgt": img2_ot,
-                                "full_seg1_st": full_seg1_ot,
-                                "full_seg2_st": full_seg2_ot,
+                                # Remove segmentation data
                                 "flow_tgt": flow_ot,
                                 "noc_tgt": noc_ot,
                                 "img_src": img_src.to(self.device),
@@ -231,8 +215,6 @@ class TrainFramework(BaseTrainer):
                             (
                                 img1_ot,
                                 img2_ot,
-                                full_seg1_ot,
-                                full_seg2_ot,
                                 flow_ot,
                                 noc_ot,
                                 obj_mask2,
@@ -240,29 +222,23 @@ class TrainFramework(BaseTrainer):
 
                     # run 3rd pass
                     imgs = torch.cat([img1_ot, img2_ot], 1)
-                    full_segs_ot = torch.cat([full_seg1_ot, full_seg2_ot], 1)
 
-                    imgs, full_segs_ot, flow_ot, noc_ot = random_crop(
-                        imgs, full_segs_ot, flow_ot, noc_ot, self.cfg.ot_size
+                    # Remove segmentation data processing
+                    imgs, flow_ot, noc_ot = random_crop(
+                        imgs, flow_ot, noc_ot, self.cfg.ot_size
                     )
                     img1_ot, img2_ot = imgs[:, :3], imgs[:, 3:6]
-                    full_seg1_ot, full_seg2_ot = (
-                        full_segs_ot[:, :1],
-                        full_segs_ot[:, 1:],
-                    )
-                    # adj_map1_ot, adj_map2_ot = full_segs_to_adj_maps(
-                    #     full_seg1_ot
-                    # ), full_segs_to_adj_maps(full_seg2_ot)
 
+                    # Remove segmentation data
                     res_dict_ot = self.model(
-                        img1_ot, img2_ot, full_seg1_ot, full_seg2_ot, with_bk=False
+                        img1_ot, img2_ot, with_bk=False
                     )
                     flow_ot_pred = res_dict_ot["flows_12"][0]
 
                     l_ot = (
                         (flow_ot_pred - flow_ot).abs() + self.cfg.ar_eps
                     ) ** self.cfg.ar_q
-                    l_ot = (l_ot * noc_ot).mean() / (noc_ot.mean() + 1e-7)
+                    l_ot = (l_ot * noc_ot).mean() / (noc_t.mean() + 1e-7)
 
                     loss += self.cfg.w_ar * l_ot
 
@@ -382,13 +358,9 @@ class TrainFramework(BaseTrainer):
                 # compute output
                 img1 = data["img1"].to(self.device)
                 img2 = data["img2"].to(self.device)
-                full_seg1, full_seg2 = data["full_seg1"].to(self.device), data[
-                    "full_seg2"
-                ].to(self.device)
+                # Remove segmentation data loading
+                # full_seg1, full_seg2 = data["full_seg1"].to(self.device), data["full_seg2"].to(self.device)
 
-                # adj_map1, adj_map2 = data["adj_map1"].to(self.device), data[
-                #     "adj_map2"
-                # ].to(self.device)
                 flow_gt = data["flow_gt"].numpy()
                 occ_mask = data["occ_mask"].numpy()
 
@@ -396,7 +368,8 @@ class TrainFramework(BaseTrainer):
                     [flow_gt, np.ones_like(occ_mask), 1 - occ_mask], axis=3
                 )
 
-                res_dict = self.model(img1, img2, full_seg1, full_seg2, with_bk=False)
+                # Remove segmentation params from model call
+                res_dict = self.model(img1, img2, with_bk=False)
                 flows = res_dict["flows_12"]
                 pred_flows = flows[0].detach().cpu().numpy().transpose([0, 2, 3, 1])
 

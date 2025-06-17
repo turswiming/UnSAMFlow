@@ -14,7 +14,7 @@ import torch
 # import torch.nn as nn
 # import torch.nn.functional as F
 from torch.optim import Optimizer
-from utils.manifold_utils import MANIFOLD_BUCKET, pathmgr
+# from utils.manifold_utils import MANIFOLD_BUCKET, pathmgr
 
 
 def init_seed(seed):
