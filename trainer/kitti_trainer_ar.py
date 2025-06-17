@@ -17,7 +17,8 @@ from utils.flow_utils import evaluate_flow, load_flow
 from utils.misc_utils import AverageMeter
 
 from .base_trainer import BaseTrainer
-
+def get_local_path(path):
+    return path
 
 class TrainFramework(BaseTrainer):
     def __init__(
@@ -372,11 +373,11 @@ class TrainFramework(BaseTrainer):
                     break
 
                 # res = list(map(load_flow, data["flow_occ"]))
-                res = [load_flow(pathmgr.get_local_path(p)) for p in data["flow_occ"]]
+                res = [load_flow(get_local_path(p)) for p in data["flow_occ"]]
                 gt_flows, occ_masks = [r[0] for r in res], [r[1] for r in res]
 
                 # res = list(map(load_flow, data["flow_noc"]))
-                res = [load_flow(pathmgr.get_local_path(p)) for p in data["flow_noc"]]
+                res = [load_flow(get_local_path(p)) for p in data["flow_noc"]]
                 noc_masks = [r[1] for r in res]
                 gt_flows = [
                     np.concatenate([flow, occ_mask, noc_mask], axis=2)

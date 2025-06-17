@@ -19,7 +19,8 @@ from utils.config_parser import init_config
 torch.backends.cudnn.benchmark = True
 import numpy as np
 
-import pkg_resources
+# Replace deprecated pkg_resources with importlib.resources
+import importlib.resources as resources
 
 from datasets.get_dataset import get_dataset
 
@@ -156,7 +157,7 @@ def main(args, run_id=None):
         # args.config = os.path.join("manifold://", MANIFOLD_BUCKET, MANIFOLD_PATH, args.resume, "config.json")
         args.config = os.path.join(args.resume, "config.json")
     else:
-        args.config = pkg_resources.resource_filename(__name__, args.config)
+        args.config = resources.resource_filename(__name__, args.config)
 
     # load config
     cfg = init_config(args.config)
