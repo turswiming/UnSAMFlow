@@ -32,9 +32,6 @@ from models.get_model import get_model,get_mask_model
 
 from trainer.get_trainer import get_trainer
 
-# our internal file system; please comment out this line and change I/O to your own file system
-# from utils.manifold_utils import MANIFOLD_BUCKET, MANIFOLD_PATH, pathmgr
-
 # Standard file system utilities
 import os
 import shutil
@@ -154,11 +151,11 @@ def main(args, run_id=None):
 
     # resuming
     if args.resume is not None:
-        # args.config = os.path.join("manifold://", MANIFOLD_BUCKET, MANIFOLD_PATH, args.resume, "config.json")
         args.config = os.path.join(args.resume, "config.json")
     else:
-        args.config = resources.resource_filename(__name__, args.config)
-
+        if not os.path.isabs(args.config):
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            args.config = os.path.join(script_dir, args.config)
     # load config
     cfg = init_config(args.config)
     cfg.train.n_gpu = args.n_gpu
@@ -195,7 +192,6 @@ def main(args, run_id=None):
     # init save_root: store files by curr_time
     if args.resume is not None:
         cfg.resume = True
-        # cfg.save_root = os.path.join("manifold://", MANIFOLD_BUCKET, MANIFOLD_PATH, args.resume)
         cfg.save_root = args.resume
     else:
         cfg.resume = False
@@ -207,24 +203,8 @@ def main(args, run_id=None):
         if args.DEBUG:
             dirname = "_DEBUG_" + dirname
 
-        # cfg.save_root = os.path.join("manifold://", MANIFOLD_BUCKET, MANIFOLD_PATH, args.exp_folder, dirname)
         cfg.save_root = os.path.join("results", args.exp_folder, dirname)
         print("=> save root: {}".format(cfg.save_root))
-        ## for the manifold file system
-        """
-        if not pathmgr.exists(cfg.save_root):
-            pathmgr.mkdirs(cfg.save_root)
-
-            pathmgr.copy_from_local(
-                args.config, os.path.join(cfg.save_root, "config.json")
-            )
-
-            if "base_configs" in cfg:
-                pathmgr.copy_from_local(
-                    os.path.join(os.path.dirname(args.config), cfg.base_configs),
-                    os.path.join(cfg.save_root, cfg.base_configs),
-                )
-        """
 
         ## for the linux file system
         os.makedirs(cfg.save_root, exist_ok=True)

@@ -6,11 +6,7 @@ import json
 import os
 
 from easydict import EasyDict
-# from utils.manifold_utils import pathmgr
-def get_local_path(file_path):
-    # Assuming pathmgr is a module that provides a method to get local paths
-    # Replace this with the actual implementation of pathmgr.get_local_path
-    return file_path  # Placeholder for actual path resolution logic
+from utils.local_paths import get_local_path
 
 def update_config(base_cfg, new_cfg):
     for key in new_cfg:

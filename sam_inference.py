@@ -11,12 +11,11 @@ from typing import Any, Dict, List
 
 import cv2  # type: ignore
 
-# from utils.manifold_utils import pathmgr
 import numpy as np
 
 from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
 from tqdm import tqdm
-YOUR_DIR = "/home/lzq/workspace/UnSAMFlow_data/"
+from utils.local_paths import BASE_DIR
 
 parser = argparse.ArgumentParser(
     description=(
@@ -226,9 +225,7 @@ def main(args: argparse.Namespace) -> None:
     #     targets = [os.path.join(args.input, f) for f in targets]
 
     if args.dataset == "KITTI-2015" or args.dataset == "KITTI-2012":
-        dataset_root = (
-            YOUR_DIR + args.dataset
-        )
+        dataset_root = os.path.join(BASE_DIR, args.dataset)
 
         targets = []
         for split in ["training", "testing"]:
@@ -238,7 +235,7 @@ def main(args: argparse.Namespace) -> None:
                 targets += [os.path.join(split, t) for t in line]
 
     elif args.dataset == "KITTI-raw":
-        dataset_root = YOUR_DIR
+        dataset_root = BASE_DIR
 
         targets = []
         with open(os.path.join(dataset_root, "kitti_train_2f_sv.txt"), "r") as f:
@@ -249,7 +246,7 @@ def main(args: argparse.Namespace) -> None:
         targets = np.unique(targets).tolist()
 
     elif args.dataset == "Sintel":
-        dataset_root = YOUR_DIR
+        dataset_root = BASE_DIR
 
         targets = []
         for split in ["training", "test"]:
@@ -259,7 +256,7 @@ def main(args: argparse.Namespace) -> None:
                 targets += [os.path.join(split, t) for t in line]
 
     elif args.dataset == "Sintel-raw":
-        dataset_root = YOUR_DIR
+        dataset_root = BASE_DIR
 
         targets = []
         with open(os.path.join(dataset_root, "sample_list.txt"), "r") as f:
@@ -299,7 +296,7 @@ def main(args: argparse.Namespace) -> None:
 
 
 def main_mask_to_full_seg():
-    home_dir = YOUR_DIR
+    home_dir = BASE_DIR
 
     import imageio
     from pycocotools import mask as mask_utils
@@ -366,7 +363,7 @@ def main_mask_to_full_seg():
 
 
 def main_mask_to_key_objects():
-    home_dir = YOUR_DIR
+    home_dir = BASE_DIR
 
     from pycocotools import mask as mask_utils
 
@@ -406,7 +403,8 @@ def main_mask_to_key_objects():
                 continue
 
             num_unique_masks = ((masks_map * mask[:, :, None]).sum((0, 1)) > 0).sum()
-            if num_unique_masks >= 6:data_stereo_flow_multiview
+            if num_unique_masks >= 6:
+                obj_masks = np.concatenate([obj_masks, mask[:, :, None]], axis=2)
 
         save_path = "{}/results/sam_results/key_objects/{}/{}.npy".format(
             home_dir, ds, img_name[:-4]

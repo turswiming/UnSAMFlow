@@ -16,7 +16,7 @@ from tqdm import tqdm
 from transforms import input_transforms
 from utils.config_parser import init_config
 from utils.flow_utils import resize_flow, writeFlowKITTI, writeFlowSintel
-from utils.manifold_utils import MANIFOLD_BUCKET, MANIFOLD_PATH, pathmgr
+from utils.local_paths import get_local_path, BASE_DIR
 from utils.torch_utils import restore_model
 
 parser = argparse.ArgumentParser(
@@ -68,10 +68,8 @@ def create_sintel_submission(model, args):
     # start inference
     model.eval()
     for dstype in ["final", "clean"]:
-        # ds_dir = os.path.join(args.output_dir, dstype)
         ds_dir_local = os.path.join(args.output_local_dir, dstype)
         ds_dir_bw_local = os.path.join(args.output_local_dir + "_bw", dstype)
-        # pathmgr.mkdirs(ds_dir)
         os.makedirs(ds_dir_local, exist_ok=True)
         os.makedirs(ds_dir_bw_local, exist_ok=True)
 
@@ -106,20 +104,15 @@ def create_sintel_submission(model, args):
 
                 scene, frame_id = data["img1_path"][i].split("/")[-2:]
                 filename = frame_id[:5] + frame_id[6:10] + ".flo"
-                # output_file = os.path.join(ds_dir, scene, filename)
                 output_file_local = os.path.join(ds_dir_local, scene, filename)
 
-                # wrtie to local and then move to manifold
+                # Write to local directory
                 writeFlowSintel(output_file_local, tensor2array(flow_pred_up)[0])
 
                 ## also compute backward flow
                 flow_pred_bw_up = resize_flow(flow_pred_bw[i : (i + 1)], (h, w))
                 output_file_local = os.path.join(ds_dir_bw_local, scene, filename)
                 writeFlowSintel(output_file_local, tensor2array(flow_pred_bw_up)[0])
-
-                # if not pathmgr.exists(os.path.dirname(output_file)):
-                #     pathmgr.mkdirs(os.path.dirname(output_file))
-                # pathmgr.copy_from_local(output_file_local, output_file)
 
     print("Completed!")
     return
@@ -156,10 +149,8 @@ def create_kitti_submission(model, args):
     # start inference
     model.eval()
     for ds in [dataset_2015, dataset_2012]:
-        # ds_dir = os.path.join(args.output_dir, ds.name)
         ds_dir_local = os.path.join(args.output_local_dir, ds.name)
         ds_dir_bw_local = os.path.join(args.output_local_dir + "_bw", ds.name)
-        # pathmgr.mkdirs(os.path.join(ds_dir, "flow"))
         os.makedirs(os.path.join(ds_dir_local, "flow"), exist_ok=True)
         os.makedirs(os.path.join(ds_dir_bw_local, "flow"), exist_ok=True)
 
@@ -182,12 +173,10 @@ def create_kitti_submission(model, args):
                 flow_pred_up = resize_flow(flow_pred[i : (i + 1)], (h, w))
 
                 filename = os.path.basename(data["img1_path"][i])
-                # output_file = os.path.join(ds_dir, "flow", filename)
                 output_file_local = os.path.join(ds_dir_local, "flow", filename)
 
-                # wrtie to local and then move to manifold
+                # Write to local directory
                 writeFlowKITTI(output_file_local, tensor2array(flow_pred_up)[0])
-                # pathmgr.copy_from_local(output_file_local, output_file)
 
                 ## also compute backward flow
                 flow_pred_bw_up = resize_flow(flow_pred_bw[i : (i + 1)], (h, w))
@@ -202,21 +191,19 @@ def create_kitti_submission(model, args):
 def main():
     args = parser.parse_args()
 
-    args.full_model_folder = os.path.join(
-        "memcache_manifold://", MANIFOLD_BUCKET, MANIFOLD_PATH, args.model_folder
-    )
+    # 直接读取本地 model_folder
+    args.full_model_folder = get_local_path(args.model_folder)
 
     if args.output_dir is None:
         args.output_dir = os.path.join(
             args.full_model_folder, args.subset + "_flow_" + args.dataset
         )
     args.output_local_dir = os.path.join(
-        YOUR_DIR,
+        BASE_DIR,
         args.model_folder,
         args.subset + "_flow_" + args.dataset,
     )
 
-    # pathmgr.mkdirs(args.output_dir)
     os.makedirs(args.output_local_dir, exist_ok=True)
 
     ## set up the model
@@ -232,19 +219,19 @@ def main():
     if args.dataset == "sintel":
         args.img_height, args.img_width = 448, 1024
  
-        # Use local data to save time
-        args.root_sintel = YOUR_DIR
-        args.full_seg_root_sintel = YOUR_DIR
+        # Use local data paths
+        args.root_sintel = os.path.join(BASE_DIR, "Sintel")
+        args.full_seg_root_sintel = os.path.join(BASE_DIR, "Sintel_seg")
         
         create_sintel_submission(model, args)
     elif args.dataset == "kitti":
         args.img_height, args.img_width = 256, 832
 
-        # Use local data to save time
-        args.root_kitti12 = YOUR_DIR
-        args.root_kitti15 = YOUR_DIR
-        args.full_seg_root_kitti12 = YOUR_DIR
-        args.full_seg_root_kitti15 = YOUR_DIR
+        # Use local data paths
+        args.root_kitti12 = os.path.join(BASE_DIR, "KITTI-2012")
+        args.root_kitti15 = os.path.join(BASE_DIR, "KITTI-2015")
+        args.full_seg_root_kitti12 = os.path.join(BASE_DIR, "KITTI-2012_seg")
+        args.full_seg_root_kitti15 = os.path.join(BASE_DIR, "KITTI-2015_seg")
 
         create_kitti_submission(model, args)
 
