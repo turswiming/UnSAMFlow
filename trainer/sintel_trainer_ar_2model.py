@@ -82,7 +82,7 @@ class TrainFramework(BaseTrainer):
             "6_bakward_update",
         ]
         timing_meters = AverageMeter(i=len(timing_meter_names))
-        key_meter_names = ["loss", "l_ph", "l_sm", "l_atst", "l_ot", "flow_mean"]
+        key_meter_names = ["loss", "l_ph", "l_sm", "l_smooth", "l_atst", "l_ot", "flow_mean"]
         key_meters = AverageMeter(i=len(key_meter_names), precision=4)
 
         name_dataset = self.train_loaders[self.i_train_set].dataset.name
@@ -128,6 +128,7 @@ class TrainFramework(BaseTrainer):
                     flow_vis_mask21,
                 ) = self.loss_func(flows, img1, img2)
                 loss = loss.mean()
+                loss = loss + loss_smooth
                 l_ph = l_ph.mean()
                 l_sm = l_sm.mean()
                 flow_mean = flow_mean.mean()
@@ -288,6 +289,7 @@ class TrainFramework(BaseTrainer):
                         loss.item(),
                         l_ph.item(),
                         l_sm.item(),
+                        loss_smooth.item(),
                         l_atst.item(),
                         l_ot.item(),
                         flow_mean.item(),

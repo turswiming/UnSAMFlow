@@ -99,7 +99,9 @@ class FlowSmoothLoss():
         mask: torch.Size([1, 2, 384, 832])
         """
         if self.embedding is None:
-            self.embedding = self.construct_embedding(pyramid_flows[0].shape[2:])
+            with torch.no_grad():   
+                self.embedding = self.construct_embedding(pyramid_flows[0].shape[2:])
+                self.embedding = self.embedding.reshape(-1,self.embedding.shape[-1])
 
         total_loss = 0.0
         for b in range(batch_size):
@@ -115,31 +117,29 @@ class FlowSmoothLoss():
             # Construct embedding
             
             # Initialize flow reconstruction
-            flow_reconstruction = torch.zeros_like(pyramid_flow_b)  # (N, 2)
+            flow_reconstruction = torch.zeros_like(pyramid_flow_b.reshape(-1,2))  # (N, 2)
             
             # Per-slot reconstruction
             K = mask_b.shape[0]
             reconstruction_loss = 0
-            
             for k in range(K):
                 mk = mask_b[k].unsqueeze(-1)  # (N, 1)
-                # print(f"mk: {mk.shape}")
-                # print(f"self.embedding: {self.embedding.shape}")
-                # print(f"pyramid_flow_b: {pyramid_flow_b.shape}")
+                mk = mk.reshape(-1,1)
+                pyramid_flow_b = pyramid_flow_b.reshape(-1,2)
+
                 Ek = self.embedding * mk  # Apply mask to embedding
                 Fk = pyramid_flow_b * mk  # Apply mask to flow
-                
+                        
                 # Solve for parameters
                 theta_k = torch.linalg.lstsq(Ek, Fk).solution
-                
                 # Reconstruct flow
                 Fk_hat = Ek @ theta_k
                 flow_reconstruction += Fk_hat  # (N, 2)
-
                 reconstruction_loss = self.each_mask_criterion(Fk_hat,Fk)
                 total_loss += reconstruction_loss*self.each_mask_item_gradient
             reconstruction_loss = self.sum_mask_criterion(pyramid_flow_b, flow_reconstruction)
             total_loss += reconstruction_loss*self.sum_mask_item_gradient
+
             # Compute reconstruction loss
             # with torch.no_grad():
             #     flow_reconstruction = flow_reconstruction.detach()
@@ -158,7 +158,6 @@ class FlowSmoothLoss():
             u, v,
             u*u,v*v,
             u*v,
-            1/u,1/v,
             torch.ones_like(u),
             ], dim=-1)
         return emb
