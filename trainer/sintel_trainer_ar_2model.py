@@ -6,8 +6,10 @@ import time
 from copy import deepcopy
 
 import numpy as np
-
+import torch.nn as nn
 import torch
+
+import torch.nn.functional as F
 from transforms.ar_transforms.oc_transforms import add_fake_object, random_crop
 from transforms.ar_transforms.sp_transforms import RandomAffineFlow
 
@@ -15,7 +17,7 @@ from utils.flow_utils import evaluate_flow
 from utils.misc_utils import AverageMeter
 
 from .base_trainer import BaseTrainer
-
+from losses.FlowSmoothLoss import FlowSmoothLoss
 
 class TrainFramework(BaseTrainer):
     def __init__(
@@ -32,10 +34,11 @@ class TrainFramework(BaseTrainer):
         rank=0,
         world_size=1,
     ):
+        flow_model, mask_model = model
         super(TrainFramework, self).__init__(
             train_loader,
             valid_loader,
-            model,
+            flow_model,
             loss_func,
             save_root,
             config,
@@ -45,9 +48,12 @@ class TrainFramework(BaseTrainer):
             rank=rank,
             world_size=world_size,
         )
+        self.mask_model = self._init_model(mask_model)
         self.sp_transform = RandomAffineFlow(
             self.cfg.st_cfg, addnoise=self.cfg.st_cfg.add_noise
         ).to(self.device)
+        
+        self.flow_smooth_loss = FlowSmoothLoss("cuda" if torch.cuda.is_available() else "cpu")
 
     def _run_one_epoch(self):
 
@@ -99,8 +105,9 @@ class TrainFramework(BaseTrainer):
                 last_time = time.time()
 
                 # run 1st pass
-                res_dict = self.model(img1, img2)
-
+                res_dict = self.model(img1, img2, with_bk=True)
+                logit_mask = self.mask_model(img1)
+                softmaxed_mask = F.softmax(logit_mask, dim=1)
                 # timing: 2_main_forward
                 batch_timing.append(time.time() - last_time)
                 last_time = time.time()
@@ -110,6 +117,7 @@ class TrainFramework(BaseTrainer):
                     torch.cat([flow12, flow21], 1)
                     for flow12, flow21 in zip(flows_12, flows_21)
                 ]
+                loss_smooth = self.flow_smooth_loss(flows_12, img1, img2, softmaxed_mask)
 
                 (
                     loss,

@@ -17,8 +17,8 @@
         },
         "epoches_raw": 100,
         "epoches_ft": -1,
-        "root_sintel": "/workspace/UnSAMFlow_data/Sintel/",
-        "root_sintel_raw": "/workspace/UnSAMFlow_data/Sintel-raw/",
+        "root_sintel": "/home/lzq/workspace/UnSAMFlow_data/Sintel/",
+        "root_sintel_raw": "/home/lzq/workspace/UnSAMFlow_data/Sintel-raw/",
         "run_at": true,
         "test_shape": [448, 1024],
         "train_subsplit": "trainval",
@@ -43,6 +43,25 @@
         "learned_upsampler": true,
         "reduce_dense": true,
         "type": "pwclite"
+    },
+    "mask_model": {
+        "type": "swin_unet",
+        "img_size": [384, 832],
+        "in_channels": 3,
+        "out_channels": 2,
+        "embed_dim": 96,
+        "depths": [2, 2, 6, 2],
+        "num_heads": [3, 6, 12, 24],
+        "window_size": 4,
+        "mlp_ratio": 4.0,
+        "qkv_bias": true,
+        "qk_scale": null,
+        "drop_rate": 0.0,
+        "attn_drop_rate": 0.0,
+        "drop_path_rate": 0.1,
+        "use_checkpoint": false,
+        "learned_upsampler": true,
+        "reduce_dense": true
     },
     "seed": 42,
     "train": {
@@ -106,5 +125,5 @@
         "weight_decay": 1e-06,
         "workers": 8
     },
-    "trainer": "SINTEL_AR"
+    "trainer": "SINTEL_AR_2MODEL"
 }
