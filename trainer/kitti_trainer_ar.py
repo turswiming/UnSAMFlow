@@ -13,12 +13,13 @@ from transforms.ar_transforms.sp_transforms import RandomAffineFlow
 # Remove import for segmentation-related functions
 # from transforms.input_transforms import full_segs_to_adj_maps
 from utils.flow_utils import evaluate_flow, load_flow
-# from utils.manifold_utils import pathmgr
+from utils.local_paths import get_local_path
 from utils.misc_utils import AverageMeter
 
 from .base_trainer import BaseTrainer
+
 def get_local_path(path):
-    return path
+    return get_local_path(path)
 
 class TrainFramework(BaseTrainer):
     def __init__(

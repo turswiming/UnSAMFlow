@@ -14,7 +14,7 @@ import torch
 # import torch.nn as nn
 # import torch.nn.functional as F
 from torch.optim import Optimizer
-# from utils.manifold_utils import MANIFOLD_BUCKET, pathmgr
+from utils.local_paths import get_local_path
 
 
 def init_seed(seed):
@@ -41,18 +41,17 @@ def other_parameters(module):
 
 
 def load_checkpoint(model_path):
-    # weights = torch.load(model_path)
-
-    if "manifold" not in model_path:
-        model_path = os.path.join("manifold://" + MANIFOLD_BUCKET, model_path)
-    with pathmgr.open(model_path, "rb") as f:
-        for i in range(3):
-            try:
-                weights = torch.load(f)
-                break
-            except Exception:
-                if i == 2:
-                    raise Exception
+    # Convert manifold path to local path if needed
+    model_path = get_local_path(model_path)
+    
+    # Load weights using standard torch.load
+    for i in range(3):
+        try:
+            weights = torch.load(model_path)
+            break
+        except Exception:
+            if i == 2:
+                raise Exception
 
     epoch = None
     if "epoch" in weights:
@@ -66,19 +65,21 @@ def load_checkpoint(model_path):
 
 def save_checkpoint(save_path, states, file_prefixes, is_best, filename="ckpt.pth.tar"):
     def run_one_sample(save_path, state, prefix, is_best, filename):
-        # torch.save(state, os.path.join(save_path, "{}_{}".format(prefix, filename)))
-
-        if "manifold" not in save_path:
-            save_path = os.path.join("manifold://" + MANIFOLD_BUCKET, save_path)
+        # Convert manifold path to local path if needed
+        save_path = get_local_path(save_path)
         save_path = os.path.join(save_path, "{}_{}".format(prefix, filename))
-        with pathmgr.open(save_path, "wb") as f:
-            for i in range(3):
-                try:
-                    torch.save(state, f)
-                    return
-                except Exception:
-                    if i == 2:
-                        raise Exception
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        
+        # Save using standard torch.save
+        for i in range(3):
+            try:
+                torch.save(state, save_path)
+                return
+            except Exception:
+                if i == 2:
+                    raise Exception
 
     if not isinstance(file_prefixes, str):
         for (prefix, state) in zip(file_prefixes, states):

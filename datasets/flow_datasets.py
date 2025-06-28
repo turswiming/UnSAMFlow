@@ -12,14 +12,18 @@ import imageio
 import numpy as np
 import torch
 
+from PIL import Image, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 # from transforms.input_transforms import full_segs_to_adj_maps
 from utils.flow_utils import load_flow
+from utils.local_paths import get_local_path
 
 # from utils.manifold_utils import pathmgr
 
 
 def local_path(path):
-    return path
+    return get_local_path(path)
 
 
 class ImgSeqDataset(torch.utils.data.Dataset, metaclass=ABCMeta):
