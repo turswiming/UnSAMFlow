@@ -121,15 +121,17 @@ def main_ddp(rank, world_size, cfg):
         device_ids=[rank],
         output_device=rank,
     )
-    mask_model = get_mask_model(cfg.model).to(device)
-    mask_model = torch.nn.parallel.DistributedDataParallel(
-        mask_model,
-        device_ids=[rank],
-        output_device=rank,
-    )
+    mask_model = None
+    if "2MODEL" in cfg.trainer:
+        mask_model = get_mask_model(cfg.mask_model).to(device)
+        mask_model = torch.nn.parallel.DistributedDataParallel(
+            mask_model,
+            device_ids=[rank],
+            output_device=rank,
+        )
     # prepare loss
     loss = get_loss(cfg.loss)
-
+    model = [model, mask_model] if mask_model is not None else model
     # prepare training scipt
     trainer = get_trainer(cfg.trainer)(
         train_loaders,
@@ -157,7 +159,9 @@ def main(args, run_id=None):
         # args.config = os.path.join("manifold://", MANIFOLD_BUCKET, MANIFOLD_PATH, args.resume, "config.json")
         args.config = os.path.join(args.resume, "config.json")
     else:
-        args.config = resources.resource_filename(__name__, args.config)
+        # Use direct path since config files are in local configs directory
+        if not os.path.isabs(args.config):
+            args.config = os.path.join(os.path.dirname(__file__), args.config)
 
     # load config
     cfg = init_config(args.config)
