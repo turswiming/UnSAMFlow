@@ -45,14 +45,11 @@
         "type": "pwclite"
     },
     "mask_model": {
-        "type": "swin_unet",
-        "img_size": [384, 832],
+        "type": "simple_unet",
         "in_channels": 3,
         "out_channels": 10,
-        "embed_dim": 48,
-        "depths": [2, 2, 6, 2],
-        "num_heads": [3, 6, 12, 24],
-        "window_size": 4
+        "features": [32, 64, 128, 256],
+        "bilinear": false
     },
     "seed": 42,
     "train": {
@@ -62,7 +59,7 @@
         "beta": 0.999,
         "bias_decay": 0,
         "epoch_num": 200,
-        "epoch_size": 1000,
+        "epoch_size": 100,
         "key_obj_aug": false,
         "lr": 0.0002,
         "lr_scheduler": {
@@ -81,8 +78,8 @@
         "n_gpu": 8,
         "optim": "adam",
         "pretrained_model": null,
-        "print_freq": 100,
-        "record_freq": 500,
+        "print_freq": 10,
+        "record_freq": 50,
         "run_atst": false,
         "run_ot": false,
         "run_st": false,

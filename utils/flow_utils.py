@@ -40,23 +40,136 @@ def load_mask(path):
     return np.expand_dims(mask, -1)
 
 
-# def flow_to_image(flow, max_flow=256):
-#     import numpy as np
-#     from matplotlib.colors import hsv_to_rgb
-#     if max_flow is not None:
-#         max_flow = max(max_flow, 1.0)
-#     else:
-#         max_flow = np.max(flow)
+def flow_to_image(flow, max_flow=None):
+    """
+    Convert flow field to color image using the Middlebury color wheel.
+    
+    Args:
+        flow: numpy array of shape (H, W, 2) or (B, H, W, 2)
+        max_flow: maximum flow magnitude for normalization. If None, use max in flow.
+    
+    Returns:
+        color_image: numpy array of shape (H, W, 3) or (B, H, W, 3) in uint8
+    """
+    try:
+        if flow.ndim == 4:
+            # Batch dimension
+            return np.stack([flow_to_image(f, max_flow) for f in flow], axis=0)
+        
+        # Ensure flow is numpy array
+        if isinstance(flow, torch.Tensor):
+            flow = flow.detach().cpu().numpy()
+        
+        # Handle unknown flow values
+        UNKNOWN_FLOW_THRESH = 1e9
+        unknown_mask = (np.abs(flow[:, :, 0]) > UNKNOWN_FLOW_THRESH) | (np.abs(flow[:, :, 1]) > UNKNOWN_FLOW_THRESH)
+        flow_clean = flow.copy()
+        flow_clean[unknown_mask] = 0
+        
+        # Calculate flow magnitude
+        u, v = flow_clean[:, :, 0], flow_clean[:, :, 1]
+        rad = np.sqrt(u**2 + v**2)
+        
+        # Normalize flow
+        if max_flow is None:
+            max_flow = np.max(rad) if np.max(rad) > 0 else 1.0
+        else:
+            max_flow = max(max_flow, 1.0)
+        
+        u = u / max_flow
+        v = v / max_flow
+        rad = rad / max_flow
+        
+        # Create color wheel
+        colorwheel = make_colorwheel()
+        ncols = colorwheel.shape[0]
+        
+        # Calculate angle and map to color wheel
+        angle = np.arctan2(-v, -u) / np.pi
+        fk = (angle + 1) / 2 * (ncols - 1) + 1
+        k0 = np.floor(fk).astype(int)
+        k1 = (k0 + 1) % ncols
+        f = fk - k0
+        
+        # Ensure k0 is within bounds
+        k0 = np.clip(k0, 0, ncols - 1)
+        k1 = np.clip(k1, 0, ncols - 1)
+        
+        # Interpolate colors
+        img = np.zeros((flow.shape[0], flow.shape[1], 3), dtype=np.uint8)
+        for i in range(3):
+            col0 = colorwheel[k0, i] / 255.0
+            col1 = colorwheel[k1, i] / 255.0
+            col = (1 - f) * col0 + f * col1
+            
+            # Increase saturation with radius
+            col[rad <= 1] = 1 - rad[rad <= 1] * (1 - col[rad <= 1])
+            col[rad > 1] = col[rad > 1] * 0.75  # Out of range
+            
+            # Fix: unknown_mask is 2D, so we don't need the third index
+            img[:, :, i] = np.floor(255 * col * (1 - unknown_mask)).astype(np.uint8)
+        
+        return img
+        
+    except Exception as e:
+        print(f"Warning: Failed to create flow visualization: {e}")
+        # Return a fallback image
+        if flow.ndim == 4:
+            # Batch case
+            return np.zeros((flow.shape[0], flow.shape[1], flow.shape[2], 3), dtype=np.uint8)
+        else:
+            # Single image case
+            return np.zeros((flow.shape[0], flow.shape[1], 3), dtype=np.uint8)
 
-#     n = 8
-#     u, v = flow[:, :, 0], flow[:, :, 1]
-#     mag = np.sqrt(np.square(u) + np.square(v))
-#     angle = np.arctan2(v, u)
-#     im_h = np.mod(angle / (2 * np.pi) + 1, 1)
-#     im_s = np.clip(mag * n / max_flow, a_min=0, a_max=1)
-#     im_v = np.clip(n - im_s, a_min=0, a_max=1)
-#     im = hsv_to_rgb(np.stack([im_h, im_s, im_v], 2))
-#     return (im * 255).astype(np.uint8)
+
+def make_colorwheel():
+    """
+    Create the Middlebury color wheel for flow visualization.
+    
+    Returns:
+        colorwheel: numpy array of shape (55, 3) with RGB values
+    """
+    RY = 15
+    YG = 6
+    GC = 4
+    CB = 11
+    BM = 13
+    MR = 6
+    
+    ncols = RY + YG + GC + CB + BM + MR
+    colorwheel = np.zeros((ncols, 3), dtype=np.uint8)
+    
+    col = 0
+    # RY
+    colorwheel[0:RY, 0] = 255
+    colorwheel[0:RY, 1] = np.floor(255 * np.arange(RY) / RY)
+    col = col + RY
+    
+    # YG
+    colorwheel[col:col+YG, 0] = 255 - np.floor(255 * np.arange(YG) / YG)
+    colorwheel[col:col+YG, 1] = 255
+    col = col + YG
+    
+    # GC
+    colorwheel[col:col+GC, 1] = 255
+    colorwheel[col:col+GC, 2] = np.floor(255 * np.arange(GC) / GC)
+    col = col + GC
+    
+    # CB
+    colorwheel[col:col+CB, 1] = 255 - np.floor(255 * np.arange(CB) / CB)
+    colorwheel[col:col+CB, 2] = 255
+    col = col + CB
+    
+    # BM
+    colorwheel[col:col+BM, 2] = 255
+    colorwheel[col:col+BM, 0] = np.floor(255 * np.arange(BM) / BM)
+    col = col + BM
+    
+    # MR
+    colorwheel[col:col+MR, 2] = 255 - np.floor(255 * np.arange(MR) / MR)
+    colorwheel[col:col+MR, 0] = 255
+    
+    return colorwheel
 
 
 def resize_flow(flow, new_shape):
@@ -69,6 +182,103 @@ def resize_flow(flow, new_shape):
     flow[:, 0] /= scale_w
     flow[:, 1] /= scale_h
     return flow
+
+
+def tensor2array(tensor, max_value=None, colormap='rainbow', channel_first=True):
+    """
+    Convert tensor to numpy array for visualization.
+    
+    Args:
+        tensor: torch.Tensor
+        max_value: maximum value for normalization
+        colormap: colormap for visualization
+        channel_first: whether tensor is in channel-first format
+    
+    Returns:
+        array: numpy array ready for visualization
+    """
+    tensor = tensor.detach().cpu().numpy()
+    if channel_first:
+        tensor = tensor.transpose(0, 2, 3, 1)
+    
+    if max_value is None:
+        max_value = np.max(tensor)
+    
+    if tensor.shape[-1] == 1:
+        # Single channel - apply colormap
+        import matplotlib.pyplot as plt
+        cm = plt.get_cmap(colormap)
+        # Handle the case where tensor might be 2D or 3D
+        if tensor.ndim == 3:
+            # Single image: (H, W, 1)
+            colored = cm(tensor[:, :, 0] / max_value)[:, :, :3]
+            tensor = (colored * 255).astype(np.uint8)
+        else:
+            # Batch of images: (B, H, W, 1)
+            colored = cm(tensor[:, :, :, 0] / max_value)[:, :, :, :3]
+            tensor = (colored * 255).astype(np.uint8)
+    elif tensor.shape[-1] == 2:
+        # Flow field
+        tensor = flow_to_image(tensor, max_value)
+    elif tensor.shape[-1] == 3:
+        # RGB image
+        tensor = np.clip(tensor, 0, 1)
+        tensor = (tensor * 255).astype(np.uint8)
+    
+    return tensor
+
+
+def create_visualization_grid(img1, flow, mask, max_flow=None, max_images=4):
+    """
+    Create a grid visualization combining image, flow, and mask.
+    
+    Args:
+        img1: torch.Tensor of shape (B, 3, H, W) - first image
+        flow: torch.Tensor of shape (B, 2, H, W) - optical flow
+        mask: torch.Tensor of shape (B, C, H, W) - segmentation mask
+        max_flow: maximum flow magnitude for normalization
+        max_images: maximum number of images to visualize
+    
+    Returns:
+        grid: numpy array of shape (H*3, W*max_images, 3) - visualization grid
+    """
+    B = min(img1.shape[0], max_images)
+    
+    # Convert tensors to numpy arrays
+    img1_np = tensor2array(img1[:B], max_value=1.0)
+    flow_np = tensor2array(flow[:B], max_value=max_flow)
+    
+    # Convert mask to visualization
+    try:
+        if mask.shape[1] > 1:  # Multi-class mask
+            mask_argmax = torch.argmax(mask[:B], dim=1, keepdim=True)
+            mask_np = tensor2array(mask_argmax, max_value=mask.shape[1]-1, colormap='tab20')
+        else:  # Binary mask
+            mask_np = tensor2array(mask[:B], max_value=1.0, colormap='gray')
+    except Exception as e:
+        print(f"Warning: Failed to process mask in create_visualization_grid: {e}")
+        # Create a fallback mask visualization
+        mask_np = np.zeros((B, img1_np.shape[1], img1_np.shape[2], 3), dtype=np.uint8)
+    
+    # Create grid
+    rows = []
+    for i in range(B):
+        try:
+            row = np.concatenate([img1_np[i], flow_np[i], mask_np[i]], axis=1)
+            rows.append(row)
+        except Exception as e:
+            print(f"Warning: Failed to create row {i} in visualization grid: {e}")
+            # Create empty row as fallback
+            empty_row = np.zeros((img1_np.shape[1], img1_np.shape[2] * 3, 3), dtype=np.uint8)
+            rows.append(empty_row)
+    
+    # Pad with empty images if needed
+    while len(rows) < max_images:
+        empty_img = np.zeros_like(rows[0])
+        rows.append(empty_img)
+    
+    grid = np.concatenate(rows, axis=0)
+    return grid
 
 
 # credit: https://github.com/princeton-vl/RAFT/blob/master/core/utils/frame_utils.py

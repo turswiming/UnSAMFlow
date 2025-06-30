@@ -5,7 +5,7 @@ Test script for Swin-UNet with 384x832 input size
 
 import torch
 import torch.nn as nn
-from models.swin_unet import SwinUNet, SwinMaskUNet
+from models.swin_unet import SwinUNet
 from models.get_model import get_model, get_mask_model
 from utils.config_parser import init_config
 import time
@@ -48,45 +48,6 @@ def test_384x832_swin_unet():
     
     return output.shape == (batch_size, 2, 384, 832)
 
-def test_384x832_swin_mask_unet():
-    """Test SwinMaskUNet with 384x832 input"""
-    print("\n" + "=" * 60)
-    print("Testing SwinMaskUNet with 384x832 input size")
-    print("=" * 60)
-    
-    # Create SwinMaskUNet with 384x832 input
-    model = SwinMaskUNet(
-        img_size=[384, 832],
-        in_channels=3,
-        out_channels=20,
-        embed_dim=96,
-        depths=[2, 2, 6, 2],
-        num_heads=[3, 6, 12, 24],
-        window_size=4
-    )
-    
-    # Create test input
-    batch_size = 2
-    input_tensor = torch.randn(batch_size, 3, 384, 832)
-    
-    print(f"Model created successfully!")
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Expected seg shape: ({batch_size}, 20, 384, 832)")
-    print(f"Expected mask shape: ({batch_size}, 1, 384, 832)")
-    
-    # Forward pass
-    start_time = time.time()
-    with torch.no_grad():
-        seg_output, mask = model(input_tensor)
-    end_time = time.time()
-    
-    print(f"Segmentation output shape: {seg_output.shape}")
-    print(f"Mask output shape: {mask.shape}")
-    print(f"Forward pass time: {(end_time - start_time)*1000:.2f} ms")
-    print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
-    print(f"Test passed: {seg_output.shape == (batch_size, 20, 384, 832) and mask.shape == (batch_size, 1, 384, 832)}")
-    
-    return seg_output.shape == (batch_size, 20, 384, 832) and mask.shape == (batch_size, 1, 384, 832)
 
 def test_config_384x832():
     """Test loading 384x832 Swin-UNet from config file"""

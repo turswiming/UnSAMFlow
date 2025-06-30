@@ -87,15 +87,15 @@ def get_dataset(cfg):
             [input_transforms.Zoom(*cfg.test_shape), input_transforms.ArrayToTensor()]
         )
 
-        train_set_1 = SintelRaw(
-            cfg.root_sintel_raw,
-            None,  # Removed full_seg_root
-            None,  # Removed key_obj_root
-            name="sintel-raw",
-            input_transform=train_input_transform,
-            ap_transform=ap_transform,
-            co_transform=co_transform,
-        )
+        # train_set_1 = SintelRaw(
+        #     cfg.root_sintel_raw,
+        #     None,  # Removed full_seg_root
+        #     None,  # Removed key_obj_root
+        #     name="sintel-raw",
+        #     input_transform=train_input_transform,
+        #     ap_transform=ap_transform,
+        #     co_transform=co_transform,
+        # )
         train_set_2_1 = Sintel(
             cfg.root_sintel,
             None,  # Removed full_seg_root
@@ -146,7 +146,8 @@ def get_dataset(cfg):
             input_transform=valid_input_transform,
         )
 
-        train_sets = [train_set_1, train_set_2]
+        train_sets = [train_set_2]
+        # train_sets = [train_set_1, train_set_2]
         train_sets_epoches = [cfg.epoches_raw, cfg.epoches_ft]
         valid_sets = [valid_set_1, valid_set_2]
 

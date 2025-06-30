@@ -3,6 +3,7 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 """
 
 import time
+import traceback
 from copy import deepcopy
 
 import numpy as np
@@ -13,7 +14,7 @@ import torch.nn.functional as F
 from transforms.ar_transforms.oc_transforms import add_fake_object, random_crop
 from transforms.ar_transforms.sp_transforms import RandomAffineFlow
 
-from utils.flow_utils import evaluate_flow
+from utils.flow_utils import evaluate_flow, create_visualization_grid
 from utils.misc_utils import AverageMeter
 
 from .base_trainer import BaseTrainer
@@ -49,6 +50,9 @@ class TrainFramework(BaseTrainer):
             world_size=world_size,
         )
         self.mask_model = self._init_model(mask_model)
+
+        self.mask_optimizer = torch.optim.Adam(self.mask_model.parameters(), lr=0.1)
+        self.mask_model.train()
         self.sp_transform = RandomAffineFlow(
             self.cfg.st_cfg, addnoise=self.cfg.st_cfg.add_noise
         ).to(self.device)
@@ -128,7 +132,7 @@ class TrainFramework(BaseTrainer):
                     flow_vis_mask21,
                 ) = self.loss_func(flows, img1, img2)
                 loss = loss.mean()
-                loss = loss + loss_smooth
+                loss = loss + loss_smooth*0.01
                 l_ph = l_ph.mean()
                 l_sm = l_sm.mean()
                 flow_mean = flow_mean.mean()
@@ -299,6 +303,7 @@ class TrainFramework(BaseTrainer):
 
                 # compute gradient and do optimization step
                 self.optimizer.zero_grad(set_to_none=True)
+                self.mask_optimizer.zero_grad(set_to_none=True)
                 loss.backward()
 
                 # clip gradient norm and back prop
@@ -306,6 +311,7 @@ class TrainFramework(BaseTrainer):
                     self.model.parameters(), self.cfg.max_grad_norm
                 )
                 self.optimizer.step()
+                self.mask_optimizer.step()
                 self.scheduler.step()
 
                 # timing: 6_bakward_update
@@ -331,7 +337,36 @@ class TrainFramework(BaseTrainer):
                             self.optimizer.param_groups[0]["lr"],
                             self.i_iter + 1,
                         )
+                        self.summary_writer.add_histogram(
+                            "train:{}/mask_logit".format(name_dataset),
+                            logit_mask,
+                            self.i_iter + 1,
+                        )
+                        
+                        # Add visualization of flow, mask, and image 1
+                        try:
+                            # Create visualization grid
+                            flow_vis = flows_12[0]  # Use the finest flow prediction
+                            mask_vis = softmaxed_mask  # Use softmaxed mask for visualization
 
+                            # Create visualization grid
+                            vis_grid = create_visualization_grid(
+                                img1, flow_vis, mask_vis, 
+                                max_flow=None, max_images=4
+                            )
+                            
+                            # Add to tensorboard
+                            self.summary_writer.add_image(
+                                "train:{}/visualization_grid".format(name_dataset),
+                                vis_grid.transpose(2, 0, 1),  # Convert to CHW format
+                                self.i_iter + 1,
+                                dataformats='CHW'
+                            )
+                            
+                        except Exception as e:
+                            print(f"stack trace: {traceback.format_exc()}")
+                            print(f"Warning: Failed to create visualization: {e}")
+                        
                         for v, name in zip(timing_meters.avg, timing_meter_names):
                             self.summary_writer.add_scalar(
                                 "timing_batch_avg/" + name, v, self.i_iter + 1
@@ -382,10 +417,39 @@ class TrainFramework(BaseTrainer):
                 res_dict = self.model(img1, img2, with_bk=False)
                 flows = res_dict["flows_12"]
                 pred_flows = flows[0].detach().cpu().numpy().transpose([0, 2, 3, 1])
+                
+                # Get mask predictions for visualization
+                logit_mask = self.mask_model(img1)
+                softmaxed_mask = F.softmax(logit_mask, dim=1)
 
                 # evaluate
                 es = evaluate_flow(gt_flows, pred_flows)
                 flow_error_meters.update(es[:3], img1.shape[0])
+                
+                # Add validation visualization (only for first batch)
+                if i_step == 0 and self.rank == 0:
+                    try:
+                        # Create visualization grid for validation
+                        flow_vis = flows[0]  # Use the finest flow prediction
+                        mask_vis = softmaxed_mask  # Use softmaxed mask for visualization
+                        
+                        # Create visualization grid
+                        vis_grid = create_visualization_grid(
+                            img1, flow_vis, mask_vis, 
+                            max_flow=None, max_images=4
+                        )
+                        
+                        # Add to tensorboard
+                        self.summary_writer.add_image(
+                            "valid{}:{}/visualization_grid".format(i_set, name_dataset),
+                            vis_grid.transpose(2, 0, 1),  # Convert to CHW format
+                            self.i_iter,
+                            dataformats='CHW'
+                        )
+                        
+                    except Exception as e:
+                        print(f"stack trace: {traceback.format_exc()}")
+                        print(f"Warning: Failed to create validation visualization: {e}")
 
             # write error to tf board.
             for value, name in zip(flow_error_meters.avg, flow_error_names):
@@ -397,10 +461,62 @@ class TrainFramework(BaseTrainer):
 
         # In order to reduce the space occupied during debugging,
         # only the model with more than cfg.save_iter iterations will be saved.
+        print(f"i_iter: {self.i_iter}, save_iter: {self.cfg.save_iter}")
+        print(f"save: {self.i_epoch % 1 == 0}")
         if self.i_iter > self.cfg.save_iter:
             self.save_model(name="model")
 
-        if self.i_epoch % 50 == 0:
+        if self.i_epoch % 1 == 0:
             self.save_model(name="model_ep{}".format(self.i_epoch))
 
         return
+
+    def save_model(self, name, save_with_runtime=True):
+        """
+        Save both flow model and mask model weights.
+        Override the base class method to handle two models.
+        """
+        if save_with_runtime:
+            # Save flow model with runtime info
+            flow_models = {
+                "epoch": self.i_epoch,
+                "iter": self.i_iter,
+                "best_error": self.best_error,
+                "state_dict": self.model.module.state_dict(),
+                "optimizer_dict": self.optimizer.state_dict(),
+                "scheduler_dict": self.scheduler.state_dict(),
+            }
+            
+            # Save mask model with runtime info
+            mask_models = {
+                "epoch": self.i_epoch,
+                "iter": self.i_iter,
+                "best_error": self.best_error,
+                "state_dict": self.mask_model.module.state_dict(),
+                "optimizer_dict": self.mask_optimizer.state_dict(),
+                "scheduler_dict": self.scheduler.state_dict(),  # Use same scheduler
+            }
+        else:
+            # Save only state dicts
+            flow_models = {"state_dict": self.model.module.state_dict()}
+            mask_models = {"state_dict": self.mask_model.module.state_dict()}
+
+        # Save flow model
+        from utils.torch_utils import save_checkpoint
+        save_checkpoint(self.save_root, flow_models, f"flow_{name}", is_best=False)
+        
+        # Save mask model
+        save_checkpoint(self.save_root, mask_models, f"mask_{name}", is_best=False)
+        
+        # Also save a combined checkpoint for easier loading
+        combined_models = {
+            "epoch": self.i_epoch,
+            "iter": self.i_iter,
+            "best_error": self.best_error,
+            "flow_state_dict": self.model.module.state_dict(),
+            "mask_state_dict": self.mask_model.module.state_dict(),
+            "flow_optimizer_dict": self.optimizer.state_dict(),
+            "mask_optimizer_dict": self.mask_optimizer.state_dict(),
+            "scheduler_dict": self.scheduler.state_dict(),
+        }
+        save_checkpoint(self.save_root, combined_models, name, is_best=False)

@@ -1,5 +1,6 @@
 from .pwclite import PWCLite
 from .swin_unet import SwinUNet
+from .simple_unet import SimpleUNet, SimpleUNetMask
 
 def get_model(cfg):
     if cfg.type == "pwclite":
@@ -36,6 +37,19 @@ def get_model(cfg):
             attn_drop_rate=attn_drop_rate,
             drop_path_rate=drop_path_rate,
             use_checkpoint=use_checkpoint
+        )
+    elif cfg.type == "simple_unet":
+        # Get Simple UNet configuration from cfg
+        in_channels = getattr(cfg, 'in_channels', 3)
+        out_channels = getattr(cfg, 'out_channels', 2)
+        features = getattr(cfg, 'features', [64, 128, 256, 512])
+        bilinear = getattr(cfg, 'bilinear', False)
+        
+        model = SimpleUNet(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            features=features,
+            bilinear=bilinear
         )
     else:
         raise NotImplementedError(cfg.type)
@@ -74,6 +88,19 @@ def get_mask_model(cfg):
             attn_drop_rate=attn_drop_rate,
             drop_path_rate=drop_path_rate,
             use_checkpoint=use_checkpoint
+        )
+    elif hasattr(cfg, 'type') and cfg.type == "simple_unet":
+        # Get Simple UNet configuration from cfg
+        in_channels = getattr(cfg, 'in_channels', 3)
+        out_channels = getattr(cfg, 'out_channels', 10)  # Default to 20 for mask model
+        features = getattr(cfg, 'features', [32, 64, 128, 256])
+        bilinear = getattr(cfg, 'bilinear', False)
+        
+        return SimpleUNetMask(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            features=features,
+            bilinear=bilinear
         )
     else:
         # Default to original MaskUNet

@@ -125,6 +125,7 @@ def main_ddp(rank, world_size, cfg):
             mask_model,
             device_ids=[rank],
             output_device=rank,
+            find_unused_parameters=True,
         )
     # prepare loss
     loss = get_loss(cfg.loss)
