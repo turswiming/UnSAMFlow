@@ -49,7 +49,7 @@
         "img_size": [384, 832],
         "in_channels": 3,
         "out_channels": 10,
-        "embed_dim": 48,
+        "embed_dim": 96,
         "depths": [2, 2, 6, 2],
         "num_heads": [3, 6, 12, 24],
         "window_size": 4
@@ -58,7 +58,7 @@
     "train": {
         "ar_eps": 0.0,
         "ar_q": 1.0,
-        "batch_size": 4,
+        "batch_size": 8,
         "beta": 0.999,
         "bias_decay": 0,
         "epoch_num": 200,
@@ -81,7 +81,7 @@
         "n_gpu": 8,
         "optim": "adam",
         "pretrained_model": null,
-        "print_freq": 100,
+        "print_freq": 10,
         "record_freq": 500,
         "run_atst": false,
         "run_ot": false,

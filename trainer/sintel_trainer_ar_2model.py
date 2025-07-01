@@ -51,7 +51,7 @@ class TrainFramework(BaseTrainer):
         )
         self.mask_model = self._init_model(mask_model)
 
-        self.mask_optimizer = torch.optim.Adam(self.mask_model.parameters(), lr=0.1)
+        self.mask_optimizer = torch.optim.Adam(self.mask_model.parameters(), lr=0.01)
         self.mask_model.train()
         self.sp_transform = RandomAffineFlow(
             self.cfg.st_cfg, addnoise=self.cfg.st_cfg.add_noise
