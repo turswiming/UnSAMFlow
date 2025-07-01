@@ -108,10 +108,23 @@ class TrainFramework(BaseTrainer):
                 batch_timing.append(time.time() - last_time)
                 last_time = time.time()
 
+                # Merge two images into a single batch
+                imgs_batch = torch.cat([img1, img2], dim=0)  # (2B, C, H, W)
+                logits_batch = self.mask_model(imgs_batch)    # (2B, num_classes, H, W)
+
+                # Split results
+                batch_size = img1.shape[0]
+                logit_mask1 = logits_batch[:batch_size]       # (B, num_classes, H, W)
+                logit_mask2 = logits_batch[batch_size:]       # (B, num_classes, H, W)
+
+                softmaxed_mask1 = F.softmax(logit_mask1, dim=1)
+                softmaxed_mask2 = F.softmax(logit_mask2, dim=1)
+
+                full_seg1 = logit_mask1.detach().argmax(dim=1,keepdim=True)
+                full_seg2 = logit_mask2.detach().argmax(dim=1,keepdim=True)
+
                 # run 1st pass
                 res_dict = self.model(img1, img2, with_bk=True)
-                logit_mask = self.mask_model(img1)
-                softmaxed_mask = F.softmax(logit_mask, dim=1)
                 # timing: 2_main_forward
                 batch_timing.append(time.time() - last_time)
                 last_time = time.time()
@@ -121,7 +134,9 @@ class TrainFramework(BaseTrainer):
                     torch.cat([flow12, flow21], 1)
                     for flow12, flow21 in zip(flows_12, flows_21)
                 ]
-                loss_smooth = self.flow_smooth_loss(flows_12, img1, img2, softmaxed_mask)
+                loss_smooth1 = self.flow_smooth_loss(flows_12, img1, img2, softmaxed_mask1)
+                loss_smooth2 = self.flow_smooth_loss(flows_21, img2, img1, softmaxed_mask2)
+                loss_smooth = (loss_smooth1 + loss_smooth2)/2
 
                 (
                     loss,

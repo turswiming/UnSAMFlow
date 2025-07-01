@@ -38,13 +38,15 @@ import shutil
 
 from utils.torch_utils import init_seed
 
+torch.autograd.set_detect_anomaly(True)
+
 
 def main_ddp(rank, world_size, cfg):
     init_seed(cfg.seed)
 
     # set up distributed process groups
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12356"
+    os.environ["MASTER_PORT"] = "11451"
 
     torch.distributed.init_process_group(
         backend="nccl", rank=rank, world_size=world_size

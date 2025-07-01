@@ -23,7 +23,7 @@ def conv(in_planes, out_planes, kernel_size=3, stride=1, dilation=1, isReLU=True
                 padding=((kernel_size - 1) * dilation) // 2,
                 bias=True,
             ),
-            nn.LeakyReLU(0.1, inplace=True),
+            nn.LeakyReLU(0.1, inplace=False),
         )
     else:
         return nn.Sequential(
@@ -186,7 +186,7 @@ class PWCLite(nn.Module):
 
         self.output_level = 4
         self.num_levels = 7
-        self.leakyRELU = nn.LeakyReLU(0.1, inplace=True)
+        self.leakyRELU = nn.LeakyReLU(0.1, inplace=False)
 
         # encoder
         self.feature_pyramid_extractor = FeatureExtractor(

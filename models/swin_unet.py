@@ -537,7 +537,7 @@ class SwinUNet(nn.Module):
                 nn.Sequential(
                     nn.ConvTranspose2d(in_dim, out_dim, kernel_size=2, stride=2),
                     nn.BatchNorm2d(out_dim),
-                    nn.ReLU(inplace=True)
+                    nn.ReLU(inplace=False)
                 )
             )
             skip_connections.append(
