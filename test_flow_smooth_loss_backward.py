@@ -13,16 +13,6 @@ from models.swin_unet import SwinUNet
 from models.get_model import get_mask_model
 from utils.config_parser import init_config
 
-def record_memory_usage(stage_name, device):
-    """记录显存使用情况"""
-    if torch.cuda.is_available():
-        allocated = torch.cuda.memory_allocated(device) / 1024**2  # MB
-        reserved = torch.cuda.memory_reserved(device) / 1024**2  # MB
-        max_allocated = torch.cuda.max_memory_allocated(device) / 1024**2  # MB
-        print(f"  {stage_name}: 已分配 {allocated:.2f} MB, 已保留 {reserved:.2f} MB, 最大分配 {max_allocated:.2f} MB")
-        return allocated, reserved, max_allocated
-    return 0, 0, 0
-
 def create_stable_flow_data(batch_size, height, width, device):
     """创建稳定的flow数据，避免数值问题"""
     # 创建更稳定的flow数据
@@ -76,16 +66,9 @@ def test_flow_smooth_loss_backward_timing():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"使用设备 / Using device: {device}")
     
-    # 清空显存缓存
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats(device)
-        print("🧹 已清空显存缓存 / GPU cache cleared")
-    
     # 创建FlowSmoothLoss
     flow_smooth_loss = FlowSmoothLoss(device)
     print(f"✅ 成功创建FlowSmoothLoss / Successfully created FlowSmoothLoss")
-    record_memory_usage("创建FlowSmoothLoss后", device)
     
     # 从配置文件加载模型
     try:
@@ -94,7 +77,6 @@ def test_flow_smooth_loss_backward_timing():
         model = model.to(device)
         print(f"✅ 成功从配置文件加载模型 / Successfully loaded model from config")
         print(f"模型类型 / Model type: {type(model).__name__}")
-        record_memory_usage("加载模型后", device)
     except Exception as e:
         print(f"❌ 配置文件加载失败 / Failed to load config: {e}")
         # 使用默认配置创建模型
@@ -108,7 +90,6 @@ def test_flow_smooth_loss_backward_timing():
             window_size=4
         ).to(device)
         print(f"✅ 使用默认配置创建模型 / Created model with default config")
-        record_memory_usage("创建模型后", device)
     
     # 设置模型为训练模式
     model.train()
@@ -127,25 +108,17 @@ def test_flow_smooth_loss_backward_timing():
         print(f"测试配置 / Test config: {config['name']}")
         print(f"{'='*60}")
         
-        # 清空显存缓存
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.reset_peak_memory_stats(device)
-        
         # 创建输入数据
         input_tensor = torch.randn(
             config['batch_size'], 3, config['height'], config['width']
         ).to(device)
-        record_memory_usage("创建输入数据后", device)
         
         # 创建稳定的flow数据
         flows_12 = [create_stable_flow_data(config['batch_size'], config['height'], config['width'], device)]
         flows_12[0].requires_grad_(True)
-        record_memory_usage("创建flow数据后", device)
         
         # 创建稳定的mask数据
         mask = create_stable_mask_data(config['batch_size'], config['height'], config['width'], device)
-        record_memory_usage("创建mask数据后", device)
         
         print(f"输入尺寸 / Input shape: {input_tensor.shape}")
         print(f"Flow尺寸 / Flow shape: {flows_12[0].shape}")
@@ -163,8 +136,6 @@ def test_flow_smooth_loss_backward_timing():
                 print(f"⚠️ 预热时出现错误 / Error during warmup: {e}")
                 break
         
-        record_memory_usage("预热后", device)
-        
         # 同步GPU
         if torch.cuda.is_available():
             torch.cuda.synchronize()
@@ -174,7 +145,6 @@ def test_flow_smooth_loss_backward_timing():
         forward_times = []
         backward_times = []
         total_times = []
-        memory_usage = []
         
         print(f"🔄 开始测试 {num_runs} 次 / Starting {num_runs} test runs...")
         
@@ -213,12 +183,6 @@ def test_flow_smooth_loss_backward_timing():
                 forward_times.append(forward_time)
                 backward_times.append(backward_time)
                 total_times.append(total_time)
-                
-                # 记录显存使用
-                if torch.cuda.is_available():
-                    allocated = torch.cuda.memory_allocated(device) / 1024**2
-                    memory_usage.append(allocated)
-                
                 successful_runs += 1
                 
                 if (i + 1) % 5 == 0:
@@ -243,23 +207,12 @@ def test_flow_smooth_loss_backward_timing():
         # 计算FPS
         fps = 1000 / total_mean
         
-        # 计算显存统计
-        if memory_usage:
-            memory_mean = np.mean(memory_usage)
-            memory_std = np.std(memory_usage)
-            memory_max = np.max(memory_usage)
-        else:
-            memory_mean = memory_std = memory_max = 0
-        
         print(f"\n📊 测试结果 / Test Results (成功 {successful_runs}/{num_runs} 次):")
         print(f"  前向传播时间 / Forward time: {forward_mean:.2f} ± {forward_std:.2f} ms")
         print(f"  反向传播时间 / Backward time: {backward_mean:.2f} ± {backward_std:.2f} ms")
         print(f"  总时间 / Total time: {total_mean:.2f} ± {total_std:.2f} ms")
         print(f"  FPS: {fps:.2f}")
         print(f"  反向传播占比 / Backward ratio: {(backward_mean/total_mean)*100:.1f}%")
-        if memory_usage:
-            print(f"  平均显存使用 / Avg memory usage: {memory_mean:.2f} ± {memory_std:.2f} MB")
-            print(f"  最大显存使用 / Max memory usage: {memory_max:.2f} MB")
         
         # 记录结果
         results.append({
@@ -272,22 +225,17 @@ def test_flow_smooth_loss_backward_timing():
             'total_std': total_std,
             'fps': fps,
             'backward_ratio': (backward_mean/total_mean)*100,
-            'successful_runs': successful_runs,
-            'memory_mean': memory_mean,
-            'memory_max': memory_max
+            'successful_runs': successful_runs
         })
-        
-        # 最终显存使用情况
-        record_memory_usage("测试完成后", device)
     
     # 打印总结
     print(f"\n{'='*80}")
     print(f"📈 测试总结 / Test Summary")
     print(f"{'='*80}")
     
-    print(f"{'配置':<15} {'前向(ms)':<12} {'反向(ms)':<12} {'总计(ms)':<12} {'FPS':<8} {'反向占比':<10} {'成功率':<8} {'显存(MB)':<10}")
-    print(f"{'Config':<15} {'Forward':<12} {'Backward':<12} {'Total':<12} {'FPS':<8} {'Bwd%':<10} {'Success':<8} {'Memory':<10}")
-    print("-" * 100)
+    print(f"{'配置':<15} {'前向(ms)':<12} {'反向(ms)':<12} {'总计(ms)':<12} {'FPS':<8} {'反向占比':<10} {'成功率':<8}")
+    print(f"{'Config':<15} {'Forward':<12} {'Backward':<12} {'Total':<12} {'FPS':<8} {'Bwd%':<10} {'Success':<8}")
+    print("-" * 90)
     
     for result in results:
         print(f"{result['config']:<15} "
@@ -296,18 +244,15 @@ def test_flow_smooth_loss_backward_timing():
               f"{result['total_mean']:<12.2f} "
               f"{result['fps']:<8.2f} "
               f"{result['backward_ratio']:<10.1f}% "
-              f"{result['successful_runs']:<8} "
-              f"{result['memory_mean']:<10.2f}")
+              f"{result['successful_runs']:<8}")
     
-    # 最终内存使用情况
+    # 内存使用情况
     if torch.cuda.is_available():
         memory_allocated = torch.cuda.memory_allocated() / 1024**2  # MB
         memory_reserved = torch.cuda.memory_reserved() / 1024**2  # MB
-        max_memory_allocated = torch.cuda.max_memory_allocated() / 1024**2  # MB
-        print(f"\n💾 最终GPU内存使用 / Final GPU Memory Usage:")
-        print(f"  当前已分配 / Current allocated: {memory_allocated:.2f} MB")
-        print(f"  当前已保留 / Current reserved: {memory_reserved:.2f} MB")
-        print(f"  最大已分配 / Max allocated: {max_memory_allocated:.2f} MB")
+        print(f"\n💾 GPU内存使用 / GPU Memory Usage:")
+        print(f"  已分配 / Allocated: {memory_allocated:.2f} MB")
+        print(f"  已保留 / Reserved: {memory_reserved:.2f} MB")
     
     print(f"\n✅ 测试完成 / Test completed!")
     return results
@@ -350,10 +295,7 @@ def test_flow_smooth_loss_components():
     embedding_mean = np.mean(embedding_times)
     embedding_std = np.std(embedding_times)
     print(f"  Embedding构建时间 / Embedding construction time: {embedding_mean:.2f} ± {embedding_std:.2f} ms")
-    record_memory_usage("Embedding构建后", device)
     
-    print(f"\n📊 组件时间总结 / Component timing summary:")
-    print(f"  Embedding构建 / Embedding construction: {embedding_mean:.2f} ms")
 
 def test_flow_smooth_loss_memory():
     """测试FlowSmoothLoss内存使用"""
@@ -369,10 +311,8 @@ def test_flow_smooth_loss_memory():
     
     # 清空GPU缓存
     torch.cuda.empty_cache()
-    torch.cuda.reset_peak_memory_stats(device)
     
     flow_smooth_loss = FlowSmoothLoss(device)
-    record_memory_usage("创建FlowSmoothLoss后", device)
     
     # 测试不同batch size的内存使用
     batch_sizes = [1, 2, 4, 8]
@@ -381,20 +321,12 @@ def test_flow_smooth_loss_memory():
         try:
             # 清空缓存
             torch.cuda.empty_cache()
-            torch.cuda.reset_peak_memory_stats(device)
-            
-            print(f"\n📦 测试 Batch size {batch_size}:")
             
             # 创建数据
             flows_12 = [create_stable_flow_data(batch_size, 384, 832, device)]
             flows_12[0].requires_grad_(True)
-            record_memory_usage("创建flow数据后", device)
-            
             input_tensor = torch.randn(batch_size, 3, 384, 832).to(device)
-            record_memory_usage("创建input数据后", device)
-            
             mask = create_stable_mask_data(batch_size, 384, 832, device)
-            record_memory_usage("创建mask数据后", device)
             
             # 记录内存使用
             memory_before = torch.cuda.memory_allocated() / 1024**2
@@ -403,14 +335,12 @@ def test_flow_smooth_loss_memory():
             with torch.enable_grad():
                 loss = flow_smooth_loss(flows_12, input_tensor, input_tensor, mask)
             memory_after_forward = torch.cuda.memory_allocated() / 1024**2
-            record_memory_usage("前向传播后", device)
             
             # 反向传播
             loss.backward()
             memory_after_backward = torch.cuda.memory_allocated() / 1024**2
-            record_memory_usage("反向传播后", device)
             
-            print(f"Batch size {batch_size} 详细内存分析:")
+            print(f"Batch size {batch_size}:")
             print(f"  前向传播内存 / Forward memory: {memory_after_forward - memory_before:.2f} MB")
             print(f"  反向传播内存 / Backward memory: {memory_after_backward - memory_after_forward:.2f} MB")
             print(f"  总内存 / Total memory: {memory_after_backward:.2f} MB")
@@ -458,11 +388,6 @@ def test_flow_smooth_loss_vs_other_losses():
     for name, loss_func, loss_compute in loss_functions:
         print(f"\n🔧 测试 {name} / Testing {name}...")
         
-        # 清空显存缓存
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.reset_peak_memory_stats(device)
-        
         # 预热
         for _ in range(3):
             try:
@@ -473,12 +398,9 @@ def test_flow_smooth_loss_vs_other_losses():
                 print(f"⚠️ 预热时出现错误 / Error during warmup: {e}")
                 break
         
-        record_memory_usage(f"{name} 预热后", device)
-        
         # 测试时间
         forward_times = []
         backward_times = []
-        memory_usage = []
         successful_runs = 0
         
         for i in range(num_runs):
@@ -515,12 +437,6 @@ def test_flow_smooth_loss_vs_other_losses():
                 
                 forward_times.append((forward_end - forward_start) * 1000)
                 backward_times.append((backward_end - backward_start) * 1000)
-                
-                # 记录显存使用
-                if torch.cuda.is_available():
-                    allocated = torch.cuda.memory_allocated(device) / 1024**2
-                    memory_usage.append(allocated)
-                
                 successful_runs += 1
                 
             except Exception as e:
@@ -534,38 +450,32 @@ def test_flow_smooth_loss_vs_other_losses():
         forward_mean = np.mean(forward_times)
         backward_mean = np.mean(backward_times)
         total_mean = forward_mean + backward_mean
-        memory_mean = np.mean(memory_usage) if memory_usage else 0
         
         print(f"  前向传播 / Forward: {forward_mean:.2f} ms")
         print(f"  反向传播 / Backward: {backward_mean:.2f} ms")
         print(f"  总时间 / Total: {total_mean:.2f} ms")
         print(f"  成功率 / Success rate: {successful_runs}/{num_runs}")
-        print(f"  平均显存 / Avg memory: {memory_mean:.2f} MB")
         
         results.append({
             'name': name,
             'forward': forward_mean,
             'backward': backward_mean,
             'total': total_mean,
-            'successful_runs': successful_runs,
-            'memory': memory_mean
+            'successful_runs': successful_runs
         })
-        
-        record_memory_usage(f"{name} 测试后", device)
     
     # 打印比较结果
     print(f"\n📊 损失函数时间比较 / Loss function timing comparison:")
-    print(f"{'损失函数':<15} {'前向(ms)':<12} {'反向(ms)':<12} {'总计(ms)':<12} {'成功率':<8} {'显存(MB)':<10}")
-    print(f"{'Loss Function':<15} {'Forward':<12} {'Backward':<12} {'Total':<12} {'Success':<8} {'Memory':<10}")
-    print("-" * 80)
+    print(f"{'损失函数':<15} {'前向(ms)':<12} {'反向(ms)':<12} {'总计(ms)':<12} {'成功率':<8}")
+    print(f"{'Loss Function':<15} {'Forward':<12} {'Backward':<12} {'Total':<12} {'Success':<8}")
+    print("-" * 70)
     
     for result in results:
         print(f"{result['name']:<15} "
               f"{result['forward']:<12.2f} "
               f"{result['backward']:<12.2f} "
               f"{result['total']:<12.2f} "
-              f"{result['successful_runs']:<8} "
-              f"{result['memory']:<10.2f}")
+              f"{result['successful_runs']:<8}")
 
 if __name__ == "__main__":
     # 运行FlowSmoothLoss反向传播时间测试

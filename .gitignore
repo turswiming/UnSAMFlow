@@ -3,3 +3,5 @@ models/correlation_package/correlation_cuda.egg-info/*
 models/correlation_package/build
 results
 *.pth
+models/correlation_package/correlation_cuda.cpython-312-x86_64-linux-gnu.so
+models/correlation_package/dist/correlation_cuda-0.0.0-py3.12-linux-x86_64.egg
