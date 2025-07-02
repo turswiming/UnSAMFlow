@@ -17,8 +17,8 @@
         },
         "epoches_raw": 100,
         "epoches_ft": -1,
-        "root_sintel": "/home/lzq/workspace/UnSAMFlow_data/Sintel/",
-        "root_sintel_raw": "/home/lzq/workspace/UnSAMFlow_data/Sintel-raw/",
+        "root_sintel": "/workspace/UnSAMFlow_data/Sintel/",
+        "root_sintel_raw": "/workspace/UnSAMFlow_data/Sintel-raw/",
         "run_at": true,
         "test_shape": [448, 1024],
         "train_subsplit": "trainval",
@@ -49,13 +49,13 @@
         "in_channels": 3,
         "out_channels": 10,
         "features": [64, 128, 256, 512],
-        "bilinear": false
+        "bilinear": true
     },
     "seed": 42,
     "train": {
         "ar_eps": 0.0,
         "ar_q": 1.0,
-        "batch_size": 1,
+        "batch_size": 4,
         "beta": 0.999,
         "bias_decay": 0,
         "epoch_num": 200,

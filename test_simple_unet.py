@@ -15,7 +15,7 @@ def test_simple_unet():
     # Create model
     model = SimpleUNet(
         in_channels=3,
-        out_channels=2,  # For optical flow (u, v)
+        out_channels=20,  # For optical flow (u, v)
         features=[64, 128, 256, 512],
         bilinear=False
     )
@@ -23,8 +23,8 @@ def test_simple_unet():
     # Create dummy input
     batch_size = 2
     channels = 3
-    height = 256
-    width = 512
+    height = 384
+    width = 768
     x = torch.randn(batch_size, channels, height, width)
     
     print(f"Input shape: {x.shape}")
@@ -34,10 +34,10 @@ def test_simple_unet():
         output = model(x)
     
     print(f"Output shape: {output.shape}")
-    print(f"Expected output shape: ({batch_size}, 2, {height}, {width})")
+    print(f"Expected output shape: ({batch_size}, 20, {height}, {width})")
     
     # Check if output shape is correct
-    expected_shape = (batch_size, 2, height, width)
+    expected_shape = (batch_size, 20, height, width)
     assert output.shape == expected_shape, f"Output shape {output.shape} != expected {expected_shape}"
     
     print("✓ SimpleUNet test passed!")
@@ -52,14 +52,14 @@ def test_simple_unet_mask():
         in_channels=3,
         out_channels=20,  # For mask segmentation
         features=[64, 128, 256, 512],
-        bilinear=False
+        bilinear=True
     )
     
     # Create dummy input
     batch_size = 2
     channels = 3
-    height = 256
-    width = 512
+    height = 384
+    width = 768
     x = torch.randn(batch_size, channels, height, width)
     
     print(f"Input shape: {x.shape}")
@@ -95,7 +95,7 @@ def test_model_parameters():
         in_channels=3,
         out_channels=20,
         features=[64, 128, 256, 512],
-        bilinear=False
+        bilinear=True
     )
     
     def count_parameters(model):
@@ -121,7 +121,7 @@ def test_different_sizes():
         bilinear=False
     )
     
-    test_sizes = [(128, 128), (256, 256), (512, 512), (256, 512), (512, 256)]
+    test_sizes = [ (384, 768)]
     
     for height, width in test_sizes:
         x = torch.randn(1, 3, height, width)

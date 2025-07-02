@@ -354,7 +354,7 @@ class TrainFramework(BaseTrainer):
                         )
                         self.summary_writer.add_histogram(
                             "train:{}/mask_logit".format(name_dataset),
-                            logit_mask,
+                            logit_mask1.cpu().detach().numpy(),
                             self.i_iter + 1,
                         )
                         
@@ -362,7 +362,7 @@ class TrainFramework(BaseTrainer):
                         try:
                             # Create visualization grid
                             flow_vis = flows_12[0]  # Use the finest flow prediction
-                            mask_vis = softmaxed_mask  # Use softmaxed mask for visualization
+                            mask_vis = softmaxed_mask1  # Use softmaxed mask for visualization
 
                             # Create visualization grid
                             vis_grid = create_visualization_grid(

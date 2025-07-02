@@ -42,21 +42,27 @@ class Up(nn.Module):
     
     def __init__(self, in_channels, out_channels, bilinear=True):
         super().__init__()
-        
+        self.reduce_channels = nn.Conv2d(in_channels*2 if bilinear else in_channels, in_channels // 2, kernel_size=1)
+
         # if bilinear, use the normal convolutions to reduce the number of channels
         if bilinear:
             self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            # After concatenation, the input channels will be in_channels + in_channels//2
-            self.conv = DoubleConv(in_channels + in_channels // 2, out_channels)
+            self.up_conv = nn.Conv2d(in_channels, in_channels // 2, kernel_size=1)
+
+            # After upsampling, we have in_channels channels
+            # We need to reduce it to in_channels // 2 to match the skip connection
+            # After concatenation, the input channels will be in_channels//2 + in_channels//2 = in_channels
+            self.conv = DoubleConv(in_channels, out_channels)
         else:
             self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
-            self.up_to_conv = nn.Conv2d(in_channels, in_channels // 2, kernel_size=1)
             # After concatenation, the input channels will be in_channels//2 + in_channels//2 = in_channels
             self.conv = DoubleConv(in_channels, out_channels)
 
     def forward(self, x1, x2):
         x1 = self.up(x1)
-        x2 = self.up_to_conv(x2)
+        if hasattr(self, 'up_conv'):
+            x1 = self.up_conv(x1)
+        x2 = self.reduce_channels(x2)
         # input is CHW
         diffY = x2.size()[2] - x1.size()[2]
         diffX = x2.size()[3] - x1.size()[3]
