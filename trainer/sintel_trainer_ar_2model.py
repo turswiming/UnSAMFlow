@@ -16,9 +16,12 @@ from transforms.ar_transforms.sp_transforms import RandomAffineFlow
 
 from utils.flow_utils import evaluate_flow, create_visualization_grid
 from utils.misc_utils import AverageMeter
-
+import os
+from utils.torch_utils import get_local_path
 from .base_trainer import BaseTrainer
 from losses.FlowSmoothLoss import FlowSmoothLoss
+
+mask_optimizer_lr = 0.01
 
 class TrainFramework(BaseTrainer):
     def __init__(
@@ -49,19 +52,40 @@ class TrainFramework(BaseTrainer):
             rank=rank,
             world_size=world_size,
         )
-        self.mask_model = self._init_model(mask_model)
+        if resume:
+            self._load_resume_ckpt_mask(mask_model)
+        else:
+            self.mask_model = self._init_model(mask_model)
 
-        self.mask_optimizer = torch.optim.Adam(self.mask_model.parameters(), lr=0.01)
+        self.mask_optimizer = torch.optim.Adam(self.mask_model.parameters(), lr=mask_optimizer_lr)
         self.mask_model.train()
         self.sp_transform = RandomAffineFlow(
             self.cfg.st_cfg, addnoise=self.cfg.st_cfg.add_noise
         ).to(self.device)
         
         self.flow_smooth_loss = FlowSmoothLoss("cuda" if torch.cuda.is_available() else "cpu")
+    def _load_resume_ckpt_mask(self, mask_model):
 
+
+        ckpt_path = os.path.join(self.save_root, "mask_model_ckpt.pth.tar")
+        ckpt_path = get_local_path(ckpt_path)
+        if not os.path.exists(ckpt_path):
+            print(f"[Warning] Mask model checkpoint not found: {ckpt_path}")
+            return
+
+        print(f"=> Resuming mask model from {ckpt_path}")
+        ckpt_dict = torch.load(ckpt_path, map_location='cpu')
+        # print("ckpt_dict.keys()", ckpt_dict.keys())
+        self.mask_model = mask_model.to(self.device)
+        self.mask_model.module.load_state_dict(ckpt_dict["state_dict"])
+        self.mask_optimizer = torch.optim.Adam(self.mask_model.parameters(), lr=mask_optimizer_lr)
+        if hasattr(self, "mask_optimizer") and "optimizer_dict" in ckpt_dict:
+            self.mask_optimizer.load_state_dict(ckpt_dict["optimizer_dict"])
+        print("=> Mask model weights loaded.")
     def _run_one_epoch(self):
 
         self.model.train()
+        self.mask_model.train()
 
         if "stage1" in self.cfg and self.i_epoch >= self.cfg.stage1.epoch:
             self.loss_func.cfg.update(self.cfg.stage1.loss)
@@ -403,6 +427,7 @@ class TrainFramework(BaseTrainer):
     def _validate_with_gt(self):
 
         self.model.eval()
+        self.mask_model.eval()
 
         for i_set, loader in enumerate(self.valid_loaders):
             name_dataset = loader.dataset.name
@@ -419,7 +444,20 @@ class TrainFramework(BaseTrainer):
                 img1 = data["img1"].to(self.device)
                 img2 = data["img2"].to(self.device)
                 # Remove segmentation data loading
-                # full_seg1, full_seg2 = data["full_seg1"].to(self.device), data["full_seg2"].to(self.device)
+                imgs_batch = torch.cat([img1, img2], dim=0)  # (2B, C, H, W)
+                logits_batch = self.mask_model(imgs_batch)    # (2B, num_classes, H, W)
+
+                # Split results
+                batch_size = img1.shape[0]
+                logit_mask1 = logits_batch[:batch_size]       # (B, num_classes, H, W)
+                logit_mask2 = logits_batch[batch_size:]       # (B, num_classes, H, W)
+
+                softmaxed_mask1 = F.softmax(logit_mask1, dim=1)
+                softmaxed_mask2 = F.softmax(logit_mask2, dim=1)
+
+
+                full_seg1 = logit_mask1.detach().argmax(dim=1,keepdim=True)
+                full_seg2 = logit_mask2.detach().argmax(dim=1,keepdim=True)
 
                 flow_gt = data["flow_gt"].numpy()
                 occ_mask = data["occ_mask"].numpy()
@@ -429,13 +467,10 @@ class TrainFramework(BaseTrainer):
                 )
 
                 # Remove segmentation params from model call
-                res_dict = self.model(img1, img2, with_bk=False)
+                res_dict = self.model(img1, img2, full_seg1, full_seg2, with_bk=False)
                 flows = res_dict["flows_12"]
                 pred_flows = flows[0].detach().cpu().numpy().transpose([0, 2, 3, 1])
                 
-                # Get mask predictions for visualization
-                logit_mask = self.mask_model(img1)
-                softmaxed_mask = F.softmax(logit_mask, dim=1)
 
                 # evaluate
                 es = evaluate_flow(gt_flows, pred_flows)
@@ -446,7 +481,7 @@ class TrainFramework(BaseTrainer):
                     try:
                         # Create visualization grid for validation
                         flow_vis = flows[0]  # Use the finest flow prediction
-                        mask_vis = softmaxed_mask  # Use softmaxed mask for visualization
+                        mask_vis = softmaxed_mask1  # Use softmaxed mask for visualization
                         
                         # Create visualization grid
                         vis_grid = create_visualization_grid(

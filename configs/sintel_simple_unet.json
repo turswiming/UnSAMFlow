@@ -21,9 +21,9 @@
         "root_sintel_raw": "/workspace/UnSAMFlow_data/Sintel-raw/",
         "run_at": true,
         "test_shape": [448, 1024],
-        "train_subsplit": "trainval",
+        "train_subsplit": "train",
         "type": "Sintel_Raw+ft_2stage",
-        "val_subsplit": "trainval"
+        "val_subsplit": "val"
     },
     "loss": {
         "edge_aware_alpha": 10,

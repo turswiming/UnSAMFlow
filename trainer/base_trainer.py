@@ -61,7 +61,6 @@ class BaseTrainer:
             ):  # skip the datasets of 0 epoches
                 self.i_train_set += 1
 
-            self.optimizer = self._create_optimizer()
             self.scheduler = self._create_scheduler(
                 self.optimizer, self.train_sets_epoches[self.i_train_set]
             )
@@ -195,12 +194,13 @@ class BaseTrainer:
 
     def _load_resume_ckpt(self, model):
         self.log("==> resuming")
+        import io 
 
-        with pathmgr.open(
-            os.path.join(self.save_root, "model_ckpt.pth.tar"), "rb"
-        ) as f:
-            ckpt_dict = torch.load(f)
+        path = os.path.join(self.save_root, "model_ckpt.pth.tar")
 
+        ckpt_dict = torch.load(path)
+        print("ckpt_dict.keys()", ckpt_dict.keys())
+        #ckpt_dict.keys() dict_keys(['epoch', 'iter', 'best_error', 'flow_state_dict', 'mask_state_dict', 'flow_optimizer_dict', 'mask_optimizer_dict', 'scheduler_dict'])  
         if "iter" not in ckpt_dict.keys():
             ckpt_dict["iter"] = ckpt_dict["epoch"] * self.cfg.epoch_size
         if "best_error" not in ckpt_dict.keys():
@@ -214,8 +214,8 @@ class BaseTrainer:
             0
         ][0]
 
-        model = model.to(self.device)
-        model.module.load_state_dict(ckpt_dict["state_dict"])
+        self.model = model.to(self.device)
+        self.model.module.load_state_dict(ckpt_dict["flow_state_dict"])
         # self.model = torch.nn.DataParallel(model, device_ids=self.device_ids)
 
         self.optimizer = self._create_optimizer()
@@ -223,10 +223,14 @@ class BaseTrainer:
             self.optimizer, self.train_sets_epoches[self.i_train_set]
         )
 
-        if "optimizer_dict" in ckpt_dict.keys():
-            self.optimizer.load_state_dict(ckpt_dict["optimizer_dict"])
-        if "scheduler_dict" in ckpt_dict.keys():
-            self.scheduler.load_state_dict(ckpt_dict["scheduler_dict"])
+        if "flow_optimizer_dict" in ckpt_dict.keys():
+            self.optimizer.load_state_dict(ckpt_dict["flow_optimizer_dict"])
+        if "flow_scheduler_dict" in ckpt_dict.keys():
+            self.scheduler.load_state_dict(ckpt_dict["flow_scheduler_dict"])
+        # if "mask_optimizer_dict" in ckpt_dict.keys():
+        #     self.mask_optimizer.load_state_dict(ckpt_dict["mask_optimizer_dict"])
+        # if "mask_scheduler_dict" in ckpt_dict.keys():
+        #     self.mask_scheduler.load_state_dict(ckpt_dict["mask_scheduler_dict"])
 
         return
 
