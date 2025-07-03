@@ -46,7 +46,7 @@
     },
     "mask_model": {
         "type": "swin_unet",
-        "img_size": [384, 832],
+        "img_size": [448, 1024],
         "in_channels": 3,
         "out_channels": 10,
         "embed_dim": 96,

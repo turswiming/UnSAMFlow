@@ -20,7 +20,7 @@
         "root_sintel": "/workspace/UnSAMFlow_data/Sintel/",
         "root_sintel_raw": "/workspace/UnSAMFlow_data/Sintel-raw/",
         "run_at": true,
-        "test_shape": [448, 1024],
+        "test_shape": [384, 832],
         "train_subsplit": "train",
         "type": "Sintel_Raw+ft_2stage",
         "val_subsplit": "val"

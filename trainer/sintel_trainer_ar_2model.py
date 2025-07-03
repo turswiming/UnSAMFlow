@@ -77,7 +77,7 @@ class TrainFramework(BaseTrainer):
         ckpt_dict = torch.load(ckpt_path, map_location='cpu')
         # print("ckpt_dict.keys()", ckpt_dict.keys())
         self.mask_model = mask_model.to(self.device)
-        self.mask_model.module.load_state_dict(ckpt_dict["state_dict"])
+        self.mask_model.module.load_state_dict(ckpt_dict["state_dict"],strict=False)
         self.mask_optimizer = torch.optim.Adam(self.mask_model.parameters(), lr=mask_optimizer_lr)
         if hasattr(self, "mask_optimizer") and "optimizer_dict" in ckpt_dict:
             self.mask_optimizer.load_state_dict(ckpt_dict["optimizer_dict"])
@@ -159,8 +159,9 @@ class TrainFramework(BaseTrainer):
                     for flow12, flow21 in zip(flows_12, flows_21)
                 ]
                 loss_smooth1 = self.flow_smooth_loss(flows_12, img1, img2, softmaxed_mask1)
-                loss_smooth2 = self.flow_smooth_loss(flows_21, img2, img1, softmaxed_mask2)
-                loss_smooth = (loss_smooth1 + loss_smooth2)/2
+                # loss_smooth2 = self.flow_smooth_loss(flows_21, img2, img1, softmaxed_mask2)
+                # loss_smooth = (loss_smooth1 + loss_smooth2)/2
+                loss_smooth = loss_smooth1
 
                 (
                     loss,

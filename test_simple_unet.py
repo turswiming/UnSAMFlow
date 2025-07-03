@@ -23,8 +23,8 @@ def test_simple_unet():
     # Create dummy input
     batch_size = 2
     channels = 3
-    height = 384
-    width = 768
+    height = 436
+    width = 1024
     x = torch.randn(batch_size, channels, height, width)
     
     print(f"Input shape: {x.shape}")
@@ -58,8 +58,8 @@ def test_simple_unet_mask():
     # Create dummy input
     batch_size = 2
     channels = 3
-    height = 384
-    width = 768
+    height = 436
+    width = 1024
     x = torch.randn(batch_size, channels, height, width)
     
     print(f"Input shape: {x.shape}")
@@ -121,7 +121,7 @@ def test_different_sizes():
         bilinear=False
     )
     
-    test_sizes = [ (384, 768)]
+    test_sizes = [ (436, 1024)]
     
     for height, width in test_sizes:
         x = torch.randn(1, 3, height, width)

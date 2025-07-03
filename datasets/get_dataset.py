@@ -82,7 +82,9 @@ def get_dataset(cfg):
 
     elif cfg.type == "Sintel_Raw+ft_2stage":
 
-        train_input_transform = transforms.Compose([input_transforms.ArrayToTensor()])
+        train_input_transform = transforms.Compose(
+            [input_transforms.Zoom(*cfg.test_shape),input_transforms.ArrayToTensor()]
+        )
         valid_input_transform = transforms.Compose(
             [input_transforms.Zoom(*cfg.test_shape), input_transforms.ArrayToTensor()]
         )

@@ -29,11 +29,11 @@ class Down(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.maxpool_conv = nn.Sequential(
-            nn.MaxPool2d(2),
             DoubleConv(in_channels, out_channels)
         )
 
     def forward(self, x):
+        x = F.interpolate(x, size=(x.size()[2]//2,x.size()[3]//2), mode='area')
         return self.maxpool_conv(x)
 
 
@@ -67,8 +67,7 @@ class Up(nn.Module):
         diffY = x2.size()[2] - x1.size()[2]
         diffX = x2.size()[3] - x1.size()[3]
 
-        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
-                        diffY // 2, diffY - diffY // 2])
+        x1 = F.interpolate(x1, size=(x2.size()[2], x2.size()[3]), mode='bilinear', align_corners=True)
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
 
@@ -101,7 +100,7 @@ class SimpleUNet(nn.Module):
         self.up4 = (Up(features[0] // factor, features[0] // factor, bilinear))
         self.outc = (OutConv(features[0] // factor, out_channels))
 
-    def forward(self, x):
+    def forward(self, x,return_features=False):
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
@@ -112,7 +111,10 @@ class SimpleUNet(nn.Module):
         x = self.up3(x, x2)
         x = self.up4(x, x1)
         logits = self.outc(x)
-        return logits
+        if return_features:
+            return logits,x1,x2,x3,x4,x5
+        else:
+            return logits
 
 
 class SimpleUNetMask(nn.Module):
@@ -123,8 +125,8 @@ class SimpleUNetMask(nn.Module):
         self.unet = SimpleUNet(in_channels=in_channels, out_channels=out_channels, 
                               features=features, bilinear=bilinear)
     
-    def forward(self, x):
-        return self.unet(x)
+    def forward(self, x,return_features=False):
+        return self.unet(x,return_features)
 
     def init_weights(self):
         for m in self.modules():
