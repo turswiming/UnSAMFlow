@@ -144,8 +144,8 @@ class TrainFramework(BaseTrainer):
                 softmaxed_mask1 = F.softmax(logit_mask1, dim=1)
                 softmaxed_mask2 = F.softmax(logit_mask2, dim=1)
 
-                full_seg1 = logit_mask1.detach().argmax(dim=1,keepdim=True)
-                full_seg2 = logit_mask2.detach().argmax(dim=1,keepdim=True)
+                full_seg1 = logit_mask1.detach().argmax(dim=1,keepdim=True).float()
+                full_seg2 = logit_mask2.detach().argmax(dim=1,keepdim=True).float()
 
                 # run 1st pass
                 res_dict = self.model(img1, img2, with_bk=True)
@@ -190,7 +190,7 @@ class TrainFramework(BaseTrainer):
                     )
                     s = {
                         "imgs": [img1, img2],
-                        # Remove segmentation data
+                        "full_segs": [full_seg1, full_seg2],
                         "flows_f": [flow_ori],
                         "masks_f": [noc_ori],
                     }
@@ -204,8 +204,9 @@ class TrainFramework(BaseTrainer):
 
                     # run another pass - remove segmentation params
                     img1_st, img2_st = st_res["imgs"]
+                    full_seg1_st, full_seg2_st = st_res["full_segs"]
                     flow_t_pred = self.model(
-                        img1_st, img2_st, with_bk=False
+                        img1_st, img2_st, full_seg1_st, full_seg2_st, with_bk=False
                     )["flows_12"][0]
 
                     if not self.cfg.mask_st:
@@ -229,8 +230,8 @@ class TrainFramework(BaseTrainer):
                     img1_ot, img2_ot = data["img1_ph"].to(self.device), data[
                         "img2_ph"
                     ].to(self.device)
-                    # Remove segmentation data loading
-                    # full_seg1_ot, full_seg2_ot = data["full_seg1"].to(self.device), data["full_seg2"].to(self.device)
+
+                    full_seg1_ot, full_seg2_ot = full_seg1.to(self.device), full_seg2.to(self.device)
 
                     flow_ot = flow_ori.clone()
                     noc_ot = noc_ori.clone()
@@ -255,7 +256,8 @@ class TrainFramework(BaseTrainer):
                             input_dict = {
                                 "img1_tgt": img1_ot,
                                 "img2_tgt": img2_ot,
-                                # Remove segmentation data
+                                "full_seg1_tgt": full_seg1_ot,
+                                "full_seg2_tgt": full_seg2_ot,
                                 "flow_tgt": flow_ot,
                                 "noc_tgt": noc_ot,
                                 "img_src": img_src.to(self.device),
@@ -267,6 +269,8 @@ class TrainFramework(BaseTrainer):
                             (
                                 img1_ot,
                                 img2_ot,
+                                full_seg1_ot,
+                                full_seg2_ot,
                                 flow_ot,
                                 noc_ot,
                                 obj_mask2,
@@ -274,16 +278,19 @@ class TrainFramework(BaseTrainer):
 
                     # run 3rd pass
                     imgs = torch.cat([img1_ot, img2_ot], 1)
+                    full_segs_ot = torch.cat([full_seg1_ot, full_seg2_ot], 1)
 
-                    # Remove segmentation data processing
-                    imgs, flow_ot, noc_ot = random_crop(
-                        imgs, flow_ot, noc_ot, self.cfg.ot_size
+                    imgs, full_segs_ot, flow_ot, noc_ot = random_crop(
+                        imgs, full_segs_ot, flow_ot, noc_ot, self.cfg.ot_size
                     )
                     img1_ot, img2_ot = imgs[:, :3], imgs[:, 3:6]
 
-                    # Remove segmentation data
+                    full_seg1_ot, full_seg2_ot = (
+                        full_segs_ot[:, :1],
+                        full_segs_ot[:, 1:],
+                    )
                     res_dict_ot = self.model(
-                        img1_ot, img2_ot, with_bk=False
+                        img1_ot, img2_ot, full_seg1_ot, full_seg2_ot, with_bk=False
                     )
                     flow_ot_pred = res_dict_ot["flows_12"][0]
 
@@ -456,8 +463,8 @@ class TrainFramework(BaseTrainer):
                 softmaxed_mask2 = F.softmax(logit_mask2, dim=1)
 
 
-                full_seg1 = logit_mask1.detach().argmax(dim=1,keepdim=True)
-                full_seg2 = logit_mask2.detach().argmax(dim=1,keepdim=True)
+                full_seg1 = logit_mask1.detach().argmax(dim=1,keepdim=True).float()
+                full_seg2 = logit_mask2.detach().argmax(dim=1,keepdim=True).float()
 
                 flow_gt = data["flow_gt"].numpy()
                 occ_mask = data["occ_mask"].numpy()

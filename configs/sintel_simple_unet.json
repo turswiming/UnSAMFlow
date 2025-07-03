@@ -84,6 +84,21 @@
         "run_ot": false,
         "run_st": false,
         "save_iter": 5000,
+        "stage1": {
+            "epoch": 50,
+            "loss": {
+                "occ_from_back": false,
+                "w_l1": 0.0,
+                "w_ssim": 0.0,
+                "w_ternary": 1.0
+            },
+            "train": {
+                "ot_size": [320, 704],
+                "run_atst": true,
+                "run_ot": true,
+                "run_st": true
+            }
+        },
         "st_cfg": {
             "add_noise": true,
             "hflip": true,
