@@ -10,10 +10,10 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
 # 1. 加载图片
-img1_path = '/workspace/UnSAMFlow_data/Sintel/training/final/alley_1/frame_0001.png'  # 第一帧
-img2_path = '/workspace/UnSAMFlow_data/Sintel/training/final/alley_1/frame_0002.png'  # 第二帧
-flow_model_path = '/workspace/UnSAMFlow/results/our_maskinput/20250702_062528_sintel_simple_unet/model_ckpt.pth.tar'
-mask_model_path = '/workspace/UnSAMFlow/results/our_maskinput/20250702_062528_sintel_simple_unet/mask_model_ckpt.pth.tar'
+img1_path = '/workspace/UnSAMFlow_data/Sintel-raw/scene/98/09988.png'  # 第一帧
+img2_path = '/workspace/UnSAMFlow_data/Sintel-raw/scene/98/09988.png'  # 第二帧
+flow_model_path = '/workspace/UnSAMFlow/results/our_maskinput/20250702_062528_sintel_simple_unet/model_ep25_ckpt.pth.tar'
+mask_model_path = '/workspace/UnSAMFlow/results/our_maskinput/20250702_062528_sintel_simple_unet/mask_model_ep25_ckpt.pth.tar'
 img = Image.open(img1_path).convert('RGB')
 img2 = Image.open(img2_path).convert('RGB')
 
@@ -22,26 +22,8 @@ transform = transforms.Compose([
     transforms.Resize((448, 1024)),
     transforms.ToTensor(),  # [0,1]
 ])
-x1 = transform(img).unsqueeze(0)  # [1, 3, H, W]
-x2 = transform(img2).unsqueeze(0)
-
-# 3. pad到32的倍数
-def pad_to_multiple(x, multiple=32):
-    h, w = x.shape[-2:]
-    pad_h = (multiple - h % multiple) % multiple
-    pad_w = (multiple - w % multiple) % multiple
-    x = torch.nn.functional.pad(x, (0, pad_w, 0, pad_h))
-    return x, pad_h, pad_w
-
-def unpad(x, pad_h, pad_w):
-    if pad_h > 0:
-        x = x[..., :-pad_h, :]
-    if pad_w > 0:
-        x = x[..., :, :-pad_w]
-    return x
-
-x1, pad_h, pad_w = pad_to_multiple(x1, 32)
-x2, _, _ = pad_to_multiple(x2, 32)
+img1 = transform(img).unsqueeze(0)  # [1, 3, H, W]
+img2 = transform(img2).unsqueeze(0)
 
 # 4. 加载模型和权重
 # flow模型
@@ -69,8 +51,8 @@ flow_model = PWCLite(cfg)
 flow_model = restore_model(flow_model,flow_model_path)  # 替换为你的PWCLite权重路径
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-x1 = x1.to(device)
-x2 = x2.to(device)
+img1 = img1.to(device)
+img2 = img2.to(device)
 flow_model = flow_model.to(device)
 flow_model.eval()
 
@@ -82,14 +64,19 @@ mask_model.eval()
 
 # 5. 推理
 with torch.no_grad():
+    # mask推理
+    mask = mask_model(img1,return_features=False)  # 只用第一帧
+    print('Mask shape:', mask.shape)
+    mask2,x1,x2,x3,x4,x5 = mask_model(img2,return_features=True)  # 只用第一帧
+    full_seg1 = mask.detach().argmax(dim=1,keepdim=True).float()
+    full_seg2 = mask2.detach().argmax(dim=1,keepdim=True).float()
+    
     # flow推理，PWCLite需要两帧输入
-    flow_out = flow_model(x1, x2)  # 返回dict
+    flow_out = flow_model(img1, img2, full_seg1, full_seg2,with_bk=True)  # 返回dict
     flow = flow_out['flows_12'][0]  # 取正向flow，shape: [1, 2, H, W]
     print('Flow shape:', flow.shape)
 
-    # mask推理
-    mask,x1,x2,x3,x4,x5 = mask_model(x1,return_features=True)  # 只用第一帧
-    print('Mask shape:', mask.shape)
+    
 
 # 6. 可视化/保存结果（可选）
 # flow可视化（只显示u分量）

@@ -15,15 +15,15 @@
             "para_crop": [384, 832],
             "swap": true
         },
-        "epoches_raw": 100,
+        "epoches_raw": 400,
         "epoches_ft": -1,
         "root_sintel": "/workspace/UnSAMFlow_data/Sintel/",
         "root_sintel_raw": "/workspace/UnSAMFlow_data/Sintel-raw/",
         "run_at": true,
-        "test_shape": [384, 832],
-        "train_subsplit": "train",
+        "test_shape": [448, 1024],
+        "train_subsplit": "trainval",
         "type": "Sintel_Raw+ft_2stage",
-        "val_subsplit": "val"
+        "val_subsplit": "trainval"
     },
     "loss": {
         "edge_aware_alpha": 10,
@@ -55,7 +55,7 @@
     "train": {
         "ar_eps": 0.0,
         "ar_q": 1.0,
-        "batch_size": 4,
+        "batch_size": 2,
         "beta": 0.999,
         "bias_decay": 0,
         "epoch_num": 200,
@@ -85,7 +85,7 @@
         "run_st": false,
         "save_iter": 5000,
         "stage1": {
-            "epoch": 50,
+            "epoch": 200,
             "loss": {
                 "occ_from_back": false,
                 "w_l1": 0.0,

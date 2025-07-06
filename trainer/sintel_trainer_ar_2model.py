@@ -21,13 +21,14 @@ from utils.torch_utils import get_local_path
 from .base_trainer import BaseTrainer
 from losses.FlowSmoothLoss import FlowSmoothLoss
 
-mask_optimizer_lr = 0.01
-
+mask_optimizer_lr = 0.003
+two_model_start_iter = 400*1000
 class TrainFramework(BaseTrainer):
     def __init__(
         self,
         train_loader,
         valid_loader,
+        train_canval_loaders,
         model,
         loss_func,
         save_root,
@@ -42,6 +43,7 @@ class TrainFramework(BaseTrainer):
         super(TrainFramework, self).__init__(
             train_loader,
             valid_loader,
+            train_canval_loaders,
             flow_model,
             loss_func,
             save_root,
@@ -131,24 +133,26 @@ class TrainFramework(BaseTrainer):
                 # timing: 1_data_loading
                 batch_timing.append(time.time() - last_time)
                 last_time = time.time()
-
+                if self.i_iter > two_model_start_iter:
                 # Merge two images into a single batch
-                imgs_batch = torch.cat([img1, img2], dim=0)  # (2B, C, H, W)
-                logits_batch = self.mask_model(imgs_batch)    # (2B, num_classes, H, W)
+                    imgs_batch = torch.cat([img1, img2], dim=0)  # (2B, C, H, W)
+                    logits_batch = self.mask_model(imgs_batch)    # (2B, num_classes, H, W)
 
-                # Split results
-                batch_size = img1.shape[0]
-                logit_mask1 = logits_batch[:batch_size]       # (B, num_classes, H, W)
-                logit_mask2 = logits_batch[batch_size:]       # (B, num_classes, H, W)
+                    # Split results
+                    batch_size = img1.shape[0]
+                    logit_mask1 = logits_batch[:batch_size]       # (B, num_classes, H, W)
+                    logit_mask2 = logits_batch[batch_size:]       # (B, num_classes, H, W)
 
-                softmaxed_mask1 = F.softmax(logit_mask1, dim=1)
-                softmaxed_mask2 = F.softmax(logit_mask2, dim=1)
+                    softmaxed_mask1 = F.softmax(logit_mask1, dim=1)
+                    softmaxed_mask2 = F.softmax(logit_mask2, dim=1)
 
-                full_seg1 = logit_mask1.detach().argmax(dim=1,keepdim=True).float()
-                full_seg2 = logit_mask2.detach().argmax(dim=1,keepdim=True).float()
-
+                    full_seg1 = logit_mask1.detach().argmax(dim=1,keepdim=True).float()
+                    full_seg2 = logit_mask2.detach().argmax(dim=1,keepdim=True).float()
+                else:
+                    full_seg1 = None
+                    full_seg2 = None
                 # run 1st pass
-                res_dict = self.model(img1, img2, with_bk=True)
+                res_dict = self.model(img1, img2, full_seg1, full_seg2,with_bk=True)
                 # timing: 2_main_forward
                 batch_timing.append(time.time() - last_time)
                 last_time = time.time()
@@ -158,7 +162,10 @@ class TrainFramework(BaseTrainer):
                     torch.cat([flow12, flow21], 1)
                     for flow12, flow21 in zip(flows_12, flows_21)
                 ]
-                loss_smooth1 = self.flow_smooth_loss(flows_12, img1, img2, softmaxed_mask1)
+                if self.i_iter > two_model_start_iter:
+                    loss_smooth1 = self.flow_smooth_loss(flows_12, img1, img2, softmaxed_mask1)
+                else:
+                    loss_smooth1 = torch.zeros(1).to(self.device)
                 # loss_smooth2 = self.flow_smooth_loss(flows_21, img2, img1, softmaxed_mask2)
                 # loss_smooth = (loss_smooth1 + loss_smooth2)/2
                 loss_smooth = loss_smooth1
@@ -191,11 +198,11 @@ class TrainFramework(BaseTrainer):
                     )
                     s = {
                         "imgs": [img1, img2],
-                        "full_segs": [full_seg1, full_seg2],
                         "flows_f": [flow_ori],
                         "masks_f": [noc_ori],
                     }
-
+                    if self.i_iter > two_model_start_iter:
+                        s["full_segs"] = [full_seg1, full_seg2]
                     st_res = (
                         self.sp_transform(deepcopy(s))
                         if self.cfg.run_st
@@ -205,7 +212,11 @@ class TrainFramework(BaseTrainer):
 
                     # run another pass - remove segmentation params
                     img1_st, img2_st = st_res["imgs"]
-                    full_seg1_st, full_seg2_st = st_res["full_segs"]
+                    if self.i_iter > two_model_start_iter:
+                        full_seg1_st, full_seg2_st = st_res["full_segs"]
+                    else:
+                        full_seg1_st = None
+                        full_seg2_st = None
                     flow_t_pred = self.model(
                         img1_st, img2_st, full_seg1_st, full_seg2_st, with_bk=False
                     )["flows_12"][0]
@@ -384,17 +395,22 @@ class TrainFramework(BaseTrainer):
                             self.optimizer.param_groups[0]["lr"],
                             self.i_iter + 1,
                         )
-                        self.summary_writer.add_histogram(
-                            "train:{}/mask_logit".format(name_dataset),
-                            logit_mask1.cpu().detach().numpy(),
-                            self.i_iter + 1,
-                        )
+                        if self.i_iter > two_model_start_iter:
+                            self.summary_writer.add_histogram(
+                                "train:{}/mask_logit".format(name_dataset),
+                                logit_mask1.cpu().detach().numpy(),
+                                self.i_iter + 1,
+                            )
                         
                         # Add visualization of flow, mask, and image 1
                         try:
                             # Create visualization grid
                             flow_vis = flows_12[0]  # Use the finest flow prediction
-                            mask_vis = softmaxed_mask1  # Use softmaxed mask for visualization
+
+                            if self.i_iter > two_model_start_iter: 
+                                mask_vis = softmaxed_mask1  # Use softmaxed mask for visualization
+                            else:
+                                mask_vis = flow_vis
 
                             # Create visualization grid
                             vis_grid = create_visualization_grid(

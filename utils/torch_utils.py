@@ -49,7 +49,8 @@ def load_checkpoint(model_path):
         try:
             weights = torch.load(model_path)
             break
-        except Exception:
+        except Exception as e:
+            print(e)
             if i == 2:
                 raise Exception
 
@@ -114,7 +115,7 @@ def restore_model(model, pretrained_file):
             new_weights[key] = weights[key]
         weights = new_weights
 
-    model.load_state_dict(weights)
+    model.load_state_dict(weights,strict=False)
     return model
 
 

@@ -30,6 +30,7 @@ class BaseTrainer:
         self,
         train_loaders,
         valid_loaders,
+        train_canval_loaders,
         model,
         loss_func,
         save_root,
@@ -44,6 +45,7 @@ class BaseTrainer:
         self.save_root = save_root
         self.summary_writer = summary_writer
         self.train_loaders, self.valid_loaders = train_loaders, valid_loaders
+        self.train_canval_loaders = train_canval_loaders
         self.train_sets_epoches = train_sets_epoches
 
         self.rank, self.world_size = rank, world_size
@@ -56,13 +58,16 @@ class BaseTrainer:
             self.model = self._init_model(model)
             self.i_epoch, self.i_iter = 0, 0
             self.i_train_set = 0
-            while (
-                self.train_sets_epoches[self.i_train_set] == 0
-            ):  # skip the datasets of 0 epoches
-                self.i_train_set += 1
-
+            if self.train_sets_epoches is not None:
+                while (
+                    self.train_sets_epoches[self.i_train_set] == 0
+                ):  # skip the datasets of 0 epoches
+                    self.i_train_set += 1
+                    
+            self.optimizer = self._create_optimizer()
+            epoches_for_scheduler = self.train_sets_epoches[self.i_train_set] if self.train_sets_epoches is not None else np.inf
             self.scheduler = self._create_scheduler(
-                self.optimizer, self.train_sets_epoches[self.i_train_set]
+                self.optimizer, epoches_for_scheduler
             )
 
             self.best_error = np.inf
@@ -84,23 +89,22 @@ class BaseTrainer:
 
     def train(self):
 
-        if (
-            self.cfg.pretrained_model is not None
-        ):  # if using a pretrained model, evaluate that first to compare
-            if self.rank == 0:
-                self._validate_with_gt()
-            torch.distributed.barrier()
+
+        if self.rank == 0:
+            self._validate_with_gt()
+        torch.distributed.barrier()
 
         for _epoch in range(self.i_epoch, self.cfg.epoch_num):
             self._run_one_epoch()
 
-            if self.i_epoch >= sum(self.train_sets_epoches[: (self.i_train_set + 1)]):
+            if self.train_sets_epoches is not None and self.i_epoch >= sum(self.train_sets_epoches[: (self.i_train_set + 1)]):
                 self.i_train_set += 1
                 self.optimizer = (
                     self._create_optimizer()
                 )  # reset the states of optimizer as well
+                epoches_for_scheduler = self.train_sets_epoches[self.i_train_set] if self.train_sets_epoches is not None else np.inf
                 self.scheduler = self._create_scheduler(
-                    self.optimizer, self.train_sets_epoches[self.i_train_set]
+                    self.optimizer, epoches_for_scheduler
                 )
 
             if self.rank == 0:
@@ -143,12 +147,21 @@ class BaseTrainer:
             {
                 "params": bias_parameters(self.model.module),
                 "weight_decay": self.cfg.bias_decay,
+                "lr": self.cfg.lr,
+                "max_lr": 0.0004,
             },
             {
                 "params": weight_parameters(self.model.module),
                 "weight_decay": self.cfg.weight_decay,
+                "lr": self.cfg.lr,
+                "max_lr": 0.0004,
             },
-            {"params": other_parameters(self.model.module), "weight_decay": 0},
+            {
+                "params": other_parameters(self.model.module), 
+                "weight_decay": 0,
+                "lr": self.cfg.lr,
+                "max_lr": 0.0004,
+            },
         ]
 
         if self.cfg.optim == "adamw":
@@ -170,6 +183,7 @@ class BaseTrainer:
     def _create_scheduler(self, optimizer, epoches=np.inf):
 
         if (
+            self.train_sets_epoches is not None and 
             self.i_train_set < len(self.train_sets_epoches) - 1
         ):  # try only the last loader uses onecyclelr
             scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=1)
@@ -183,6 +197,11 @@ class BaseTrainer:
             if self.cfg.lr_scheduler.module == "OneCycleLR":
                 params["epochs"] = min(epoches, self.cfg.epoch_num - self.i_epoch)
                 params["steps_per_epoch"] = self.cfg.epoch_size
+                # Ensure max_lr is set for OneCycleLR
+                if "max_lr" not in params:
+                    params["max_lr"] = self.cfg.lr
+                print("params", params)
+
 
             scheduler = getattr(torch.optim.lr_scheduler, self.cfg.lr_scheduler.module)(
                 optimizer, **params
@@ -194,7 +213,6 @@ class BaseTrainer:
 
     def _load_resume_ckpt(self, model):
         self.log("==> resuming")
-        import io 
 
         path = os.path.join(self.save_root, "model_ckpt.pth.tar")
 
@@ -210,17 +228,21 @@ class BaseTrainer:
             ckpt_dict["iter"],
             ckpt_dict["best_error"],
         )
-        self.i_train_set = np.where(self.i_epoch < np.cumsum(self.train_sets_epoches))[
-            0
-        ][0]
+        if self.train_sets_epoches is not None:
+            self.i_train_set = np.where(self.i_epoch < np.cumsum(self.train_sets_epoches))[
+                0
+            ][0]
+        else:
+            self.i_train_set = 0
 
         self.model = model.to(self.device)
         self.model.module.load_state_dict(ckpt_dict["flow_state_dict"])
         # self.model = torch.nn.DataParallel(model, device_ids=self.device_ids)
 
         self.optimizer = self._create_optimizer()
+        epoches_for_scheduler = self.train_sets_epoches[self.i_train_set] if self.train_sets_epoches is not None else np.inf
         self.scheduler = self._create_scheduler(
-            self.optimizer, self.train_sets_epoches[self.i_train_set]
+            self.optimizer, epoches_for_scheduler
         )
 
         if "flow_optimizer_dict" in ckpt_dict.keys():

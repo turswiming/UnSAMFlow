@@ -143,8 +143,8 @@ class FlowSmoothLoss():
                 # Reconstruct flow
                 Fk_hat = Ek @ theta_k
                 flow_reconstruction += Fk_hat.reshape(-1,2)  # (N, 2)
-                reconstruction_loss = self.each_mask_criterion(Fk_hat,Fk)
-                total_loss += reconstruction_loss*self.each_mask_item_gradient
+                # reconstruction_loss = self.each_mask_criterion(Fk_hat,Fk)
+                # total_loss += reconstruction_loss*self.each_mask_item_gradient
             reconstruction_loss = self.sum_mask_criterion(pyramid_flow_b, flow_reconstruction)
             total_loss += reconstruction_loss*self.sum_mask_item_gradient
 

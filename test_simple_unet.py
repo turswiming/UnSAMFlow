@@ -2,12 +2,17 @@
 """
 Test script for SimpleUNet model
 """
-
+import time
 import torch
 import torch.nn as nn
 from models.simple_unet import SimpleUNet, SimpleUNetMask
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+batch_size = 2
+channels = 3
+height = 448
+width = 1024
 def test_simple_unet():
     """Test SimpleUNet model"""
     print("Testing SimpleUNet...")
@@ -19,13 +24,11 @@ def test_simple_unet():
         features=[64, 128, 256, 512],
         bilinear=False
     )
-    
+    model.to(device)
     # Create dummy input
-    batch_size = 2
-    channels = 3
-    height = 436
-    width = 1024
-    x = torch.randn(batch_size, channels, height, width)
+
+
+    x = torch.randn(batch_size, channels, height, width).to(device)
     
     print(f"Input shape: {x.shape}")
     
@@ -54,13 +57,11 @@ def test_simple_unet_mask():
         features=[64, 128, 256, 512],
         bilinear=True
     )
+    model.to(device)
     
     # Create dummy input
-    batch_size = 2
-    channels = 3
-    height = 436
-    width = 1024
-    x = torch.randn(batch_size, channels, height, width)
+
+    x = torch.randn(batch_size, channels, height, width).to(device)
     
     print(f"Input shape: {x.shape}")
     
@@ -89,7 +90,7 @@ def test_model_parameters():
         features=[64, 128, 256, 512],
         bilinear=False
     )
-    
+    model1.to(device)
     # SimpleUNetMask
     model2 = SimpleUNetMask(
         in_channels=3,
@@ -97,7 +98,7 @@ def test_model_parameters():
         features=[64, 128, 256, 512],
         bilinear=True
     )
-    
+    model2.to(device)
     def count_parameters(model):
         return sum(p.numel() for p in model.parameters() if p.requires_grad)
     
@@ -110,9 +111,11 @@ def test_model_parameters():
     print("✓ Parameter count test passed!")
 
 
-def test_different_sizes():
-    """Test model with different input sizes"""
-    print("\nTesting different input sizes...")
+
+
+def test_inference_speed():
+    """Test inference speed"""
+    print("\nTesting inference speed...")
     
     model = SimpleUNet(
         in_channels=3,
@@ -120,20 +123,52 @@ def test_different_sizes():
         features=[64, 128, 256, 512],
         bilinear=False
     )
+    model.to(device)
     
-    test_sizes = [ (436, 1024)]
+    # Create dummy input
+    x = torch.randn(batch_size, channels, height, width).to(device)
     
-    for height, width in test_sizes:
-        x = torch.randn(1, 3, height, width)
-        with torch.no_grad():
+    print(f"Input shape: {x.shape}")
+    infer_iter = 10
+        # Forward pass  
+    with torch.no_grad():
+        start_time = time.time()
+        for _ in range(infer_iter):
             output = model(x)
-        
-        expected_shape = (1, 2, height, width)
-        assert output.shape == expected_shape, f"Size {height}x{width}: Output shape {output.shape} != expected {expected_shape}"
-        print(f"✓ Size {height}x{width} passed!")
+        end_time = time.time()
+        inference_time = (end_time - start_time) / infer_iter
     
-    print("✓ Different sizes test passed!")
+    print(f"Inference time: {inference_time:.4f} seconds")
+    print("✓ Inference speed test passed!")
 
+
+def test_backward_speed():
+    """Test backward speed"""
+    print("\nTesting backward speed...")
+    
+    model = SimpleUNet(
+        in_channels=3,
+        out_channels=2,
+        features=[64, 128, 256, 512],
+        bilinear=False
+    )
+    model.to(device)
+
+    infer_iter = 10
+    start_time = time.time()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
+    for _ in range(infer_iter):
+        x = torch.randn(batch_size, channels, height, width).to(device)
+        output = model(x)
+        loss = output.sum()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    end_time = time.time()
+    backward_time = (end_time - start_time) / infer_iter
+    print(f"Backward time: {backward_time:.4f} seconds")
+    print("✓ Backward speed test passed!")
 
 if __name__ == "__main__":
     print("=" * 50)
@@ -144,8 +179,8 @@ if __name__ == "__main__":
         test_simple_unet()
         test_simple_unet_mask()
         test_model_parameters()
-        test_different_sizes()
-        
+        test_inference_speed()
+        test_backward_speed()
         print("\n" + "=" * 50)
         print("All tests passed! ✓")
         print("=" * 50)

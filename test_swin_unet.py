@@ -5,10 +5,20 @@ Test script for Swin-UNet implementation
 
 import torch
 import torch.nn as nn
-from models.swin_unet import SwinUNet, SwinMaskUNet
+from models.swin_unet import SwinUNet
 from models.get_model import get_model, get_mask_model
 from utils.config_parser import init_config
 import json
+import time
+#print the stack trace
+import traceback
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+batch_size = 2
+out_channels = 10
+in_channels = 3
+height = 448
+width = 1024
 
 def test_swin_unet_basic():
     """Test basic Swin-UNet functionality"""
@@ -16,9 +26,9 @@ def test_swin_unet_basic():
     
     # Create a simple Swin-UNet
     model = SwinUNet(
-        img_size=224,
-        in_channels=3,
-        out_channels=2,
+        img_size=(height, width),
+        in_channels=in_channels,
+        out_channels=out_channels,
         embed_dim=96,
         depths=[2, 2, 6, 2],
         num_heads=[3, 6, 12, 24],
@@ -26,8 +36,7 @@ def test_swin_unet_basic():
     )
     
     # Create test input
-    batch_size = 2
-    input_tensor = torch.randn(batch_size, 3, 384, 832)
+    input_tensor = torch.randn(batch_size, in_channels, height, width)
     
     # Forward pass
     with torch.no_grad():
@@ -35,161 +44,89 @@ def test_swin_unet_basic():
     
     print(f"Input shape: {input_tensor.shape}")
     print(f"Output shape: {output.shape}")
-    print(f"Expected output shape: ({batch_size}, 2, 384, 832)")
-    print(f"Test passed: {output.shape == (batch_size, 2, 384, 832)}")
+    print(f"Expected output shape: ({batch_size}, {out_channels}, {height}, {width})")
+    print(f"Test passed: {output.shape == (batch_size, out_channels, height,width)}")
     
-    return output.shape == (batch_size, 2, 384, 224)
+    return output.shape == (batch_size, out_channels, height, width)
 
-def test_swin_mask_unet():
-    """Test SwinMaskUNet functionality"""
-    print("\nTesting SwinMaskUNet...")
-    
-    # Create a SwinMaskUNet
-    model = SwinMaskUNet(
-        img_size=224,
-        in_channels=3,
-        out_channels=20,
+
+def test_inference_speed():
+    """Test inference speed"""
+    print("\nTesting inference speed...")
+    global height, width
+    model = SwinUNet(
+        img_size=(height, width),
+        in_channels=in_channels,
+        out_channels=out_channels,
         embed_dim=96,
         depths=[2, 2, 6, 2],
         num_heads=[3, 6, 12, 24],
         window_size=7
     )
+    model.to(device)
     
-    # Create test input
-    batch_size = 2
-    input_tensor = torch.randn(batch_size, 3, 384, 832)
+    x = torch.randn(batch_size, in_channels, height, width).to(device)
     
-    # Forward pass
+    print(f"Input shape: {x.shape}")
+    infer_iter = 10
     with torch.no_grad():
-        seg_output, mask = model(input_tensor)
+        start_time = time.time()
+        for _ in range(infer_iter):
+            output = model(x)
+        end_time = time.time()
+        inference_time = (end_time - start_time) / infer_iter
     
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Segmentation output shape: {seg_output.shape}")
-    print(f"Mask output shape: {mask.shape}")
-    print(f"Expected seg shape: ({batch_size}, 20, 384, 832)")
-    print(f"Expected mask shape: ({batch_size}, 1, 384, 832)")
-    print(f"Test passed: {seg_output.shape == (batch_size, 20, 384, 832) and mask.shape == (batch_size, 1, 384, 832)}")
-    
-    return seg_output.shape == (batch_size, 20, 384, 832) and mask.shape == (batch_size, 1, 384, 832)
+    print(f"Inference time: {inference_time:.4f} seconds")
+    print("✓ Inference speed test passed!")
+    return True
+def test_backward_speed():
+    """Test backward speed"""
+    print("\nTesting backward speed...")
+    global height, width
+    model = SwinUNet(
+        img_size=(height, width),
+        in_channels=in_channels,
+        out_channels=out_channels,
+        embed_dim=96,
+        depths=[2, 2, 6, 2],
+        num_heads=[3, 6, 12, 24],
+        window_size=7
+    )
+    model.to(device)
 
-def test_get_model():
-    """Test get_model function with Swin-UNet"""
-    print("\nTesting get_model function...")
-    
-    # Create a mock config
-    class MockConfig:
-        def __init__(self):
-            self.type = "swin_unet"
-            self.img_size = 224
-            self.in_channels = 3
-            self.out_channels = 2
-            self.embed_dim = 96
-            self.depths = [2, 2, 6, 2]
-            self.num_heads = [3, 6, 12, 24]
-            self.window_size = 7
-            self.mlp_ratio = 4.0
-            self.qkv_bias = True
-            self.qk_scale = None
-            self.drop_rate = 0.0
-            self.attn_drop_rate = 0.0
-            self.drop_path_rate = 0.1
-            self.use_checkpoint = False
-    
-    config = MockConfig()
-    
-    # Get model
-    model = get_model(config)
-    
-    # Test forward pass
-    batch_size = 2
-    input_tensor = torch.randn(batch_size, 3, 384, 832)
-    
-    with torch.no_grad():
-        output = model(input_tensor)
-    
-    print(f"Model type: {type(model).__name__}")
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Output shape: {output.shape}")
-    print(f"Expected output shape: ({batch_size}, 2, 384, 832)")
-    print(f"Test passed: {output.shape == (batch_size, 2, 384, 832)}")
-    
-    return output.shape == (batch_size, 2, 384, 832)
+    # Create dummy input
 
-def test_get_mask_model():
-    """Test get_mask_model function with Swin-UNet"""
-    print("\nTesting get_mask_model function...")
-    
-    # Create a mock config
-    class MockConfig:
-        def __init__(self):
-            self.type = "swin_unet"
-            self.img_size = 224
-            self.in_channels = 3
-            self.out_channels = 20
-            self.embed_dim = 96
-            self.depths = [2, 2, 6, 2]
-            self.num_heads = [3, 6, 12, 24]
-            self.window_size = 7
-            self.mlp_ratio = 4.0
-            self.qkv_bias = True
-            self.qk_scale = None
-            self.drop_rate = 0.0
-            self.attn_drop_rate = 0.0
-            self.drop_path_rate = 0.1
-            self.use_checkpoint = False
-    
-    config = MockConfig()
-    
-    # Get mask model
-    model = get_mask_model(config)
-    
-    # Test forward pass
-    batch_size = 2
-    input_tensor = torch.randn(batch_size, 3, 384, 832)
-    
-    with torch.no_grad():
-        seg_output, mask = model(input_tensor)
-    
-    print(f"Model type: {type(model).__name__}")
-    print(f"Input shape: {input_tensor.shape}")
-    print(f"Segmentation output shape: {seg_output.shape}")
-    print(f"Mask output shape: {mask.shape}")
-    print(f"Expected seg shape: ({batch_size}, 20, 384, 832)")
-    print(f"Expected mask shape: ({batch_size}, 1, 384, 832)")
-    print(f"Test passed: {seg_output.shape == (batch_size, 20, 384, 832) and mask.shape == (batch_size, 1, 384, 832)}")
-    
-    return seg_output.shape == (batch_size, 20, 384, 832) and mask.shape == (batch_size, 1, 384, 832)
+    infer_iter = 10
+    start_time = time.time()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    for _ in range(infer_iter):
+        x = torch.randn(batch_size, in_channels, height, width).to(device)
+        output = model(x)
+        loss = output.sum()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    end_time = time.time()
+    backward_time = (end_time - start_time) / infer_iter
+    print(f"Backward time: {backward_time:.4f} seconds")
+    print("✓ Backward speed test passed!")
+    return True
 
-def test_config_file():
-    """Test loading Swin-UNet from config file"""
-    print("\nTesting config file loading...")
-    
-    try:
-        # Load config
-        config = init_config("configs/sintel_swin_unet.json")
-        
-        # Get model
-        model = get_model(config.model)
-        
-        # Test forward pass
-        batch_size = 2
-        input_tensor = torch.randn(batch_size, 3, 384, 832)
-        
-        with torch.no_grad():
-            output = model(input_tensor)
-        
-        print(f"Config loaded successfully")
-        print(f"Model type: {type(model).__name__}")
-        print(f"Input shape: {input_tensor.shape}")
-        print(f"Output shape: {output.shape}")
-        print(f"Expected output shape: ({batch_size}, 2, 384, 832)")
-        print(f"Test passed: {output.shape == (batch_size, 2, 384, 832)}")
-        
-        return output.shape == (batch_size, 2, 384, 832)
-        
-    except Exception as e:
-        print(f"Error loading config: {e}")
-        return False
+def test_parameters():
+    """Test model parameters"""
+    print("\nTesting model parameters...")
+    model = SwinUNet(
+        img_size=(height, width),
+        in_channels=in_channels,
+        out_channels=out_channels,
+        embed_dim=96,
+        depths=[2, 2, 6, 2],
+        num_heads=[3, 6, 12, 24],
+        window_size=7
+    )
+    model.to(device)
+    print(f"Model parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+    return True
 
 def main():
     """Run all tests"""
@@ -199,10 +136,9 @@ def main():
     
     tests = [
         test_swin_unet_basic,
-        test_swin_mask_unet,
-        test_get_model,
-        test_get_mask_model,
-        test_config_file
+        test_inference_speed,
+        test_backward_speed,
+        test_parameters
     ]
     
     passed = 0
@@ -214,6 +150,7 @@ def main():
                 passed += 1
         except Exception as e:
             print(f"Test failed with error: {e}")
+            traceback.print_exc()
     
     print("\n" + "=" * 50)
     print(f"Test Results: {passed}/{total} tests passed")

@@ -33,7 +33,7 @@ class Down(nn.Module):
         )
 
     def forward(self, x):
-        x = F.interpolate(x, size=(x.size()[2]//2,x.size()[3]//2), mode='area')
+        x = F.interpolate(x, size=(x.size()[2]//2,x.size()[3]//2))
         return self.maxpool_conv(x)
 
 

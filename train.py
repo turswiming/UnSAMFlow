@@ -57,7 +57,7 @@ def main_ddp(rank, world_size, cfg):
     print(f"Use GPU {rank} ({torch.cuda.get_device_name(rank)}) for training")
 
     # prepare data
-    train_sets, valid_sets, train_sets_epoches = get_dataset(cfg.data)
+    train_sets, valid_sets,train_sets_canval, train_sets_epoches = get_dataset(cfg.data)
     if rank == 0:
         print(
             "train sets: "
@@ -74,7 +74,7 @@ def main_ddp(rank, world_size, cfg):
 
     train_sets_epoches = [np.inf if e == -1 else e for e in train_sets_epoches]
 
-    train_loaders, valid_loaders = [], []
+    train_loaders, valid_loaders,train_canval_loaders = [], [],[]
     for ds in train_sets:
         sampler = torch.utils.data.DistributedSampler(
             ds, num_replicas=world_size, rank=rank, shuffle=True, drop_last=True
@@ -103,6 +103,16 @@ def main_ddp(rank, world_size, cfg):
                 drop_last=False,
             )
             valid_loaders.append(valid_loader)
+        for ds in train_sets_canval:
+            train_canval_loader = torch.utils.data.DataLoader(
+                ds,
+                batch_size=4,
+                num_workers=4,
+                pin_memory=True,
+                shuffle=False,
+                drop_last=False,
+            )
+            train_canval_loaders.append(train_canval_loader)
         valid_size = sum([len(loader) for loader in valid_loaders])
         if cfg.train.valid_size == 0:
             cfg.train.valid_size = valid_size
@@ -111,8 +121,10 @@ def main_ddp(rank, world_size, cfg):
     else:
         writer = None
         valid_loaders = []
+        train_canval_loaders = []
     print(f"summary writer: {writer}")
     print(f"valid size: {cfg.train.valid_size}")
+    print(f"train can validate size: {len(train_canval_loaders)}")
     # prepare model
     model = get_model(cfg.model).to(device)
     model = torch.nn.parallel.DistributedDataParallel(
@@ -136,6 +148,7 @@ def main_ddp(rank, world_size, cfg):
     trainer = get_trainer(cfg.trainer)(
         train_loaders,
         valid_loaders,
+        train_canval_loaders,
         model,
         loss,
         cfg.save_root,
